@@ -3,11 +3,11 @@
 import Link from "next/link";
 import TagChip, { TagType } from "@/components/TagChip";
 
-type Subject = {
+type Offering = {
   id: number | string;
-  name: string;
-  professor: string | null;
-  semester: string | null;
+  subject: { id: number | string; name: string; department: string | null } | null;
+  professor: { id: number | string; name: string } | null;
+  semester: { id: number | string; year: number; term: number } | null;
 };
 
 // TODO: posts 테이블 연결되면 실제 데이터로 교체
@@ -39,7 +39,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function HomeView({ subjects }: { subjects: Subject[] }) {
+export default function HomeView({ offerings }: { offerings: Offering[] }) {
   return (
     <div className="h-full overflow-y-auto bg-white px-8 py-7">
       {/* 이어보기 카드 — 더미 데이터 */}
@@ -56,32 +56,37 @@ export default function HomeView({ subjects }: { subjects: Subject[] }) {
         </div>
       </Link>
 
-      {/* 내 과목 — 실제 DB 데이터 */}
+      {/* 내 과목 — 실제 DB 데이터 (이번 학기 개설 기준) */}
       <SectionLabel>내 과목</SectionLabel>
-      {subjects.length === 0 ? (
+      {offerings.length === 0 ? (
         <p className="mb-8 text-sm text-[#8E8C86]">등록된 강의가 없습니다.</p>
       ) : (
         <div className="mb-8 grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-[#DEDCD6] shadow-[0_1px_2px_rgba(0,0,0,0.04)] sm:grid-cols-2 lg:grid-cols-3">
-          {subjects.map((subject) => (
-            <Link
-              key={subject.id}
-              href={`/materials?subject=${encodeURIComponent(subject.name)}`}
-              className="border-l-[3px] border-transparent bg-white px-[18px] py-4 transition-colors hover:bg-[#FBFBFA]"
-            >
-              <div className="mb-1.5 flex items-center gap-[7px]">
-                <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-[#B4B2A9]" />
-                <span className="text-sm font-semibold text-[#37352F]">
-                  {subject.name}
-                </span>
-              </div>
-              <div className="mb-[3px] truncate text-[12.5px] text-[#6E6D68]">
-                {subject.professor ?? "교수 정보 없음"}
-              </div>
-              <div className="text-[11.5px] text-[#8E8C86]">
-                {subject.semester ?? ""}
-              </div>
-            </Link>
-          ))}
+          {offerings.map((offering) => {
+            const subjectName = offering.subject?.name ?? "이름 없음";
+            return (
+              <Link
+                key={offering.id}
+                href={`/materials?subject=${encodeURIComponent(subjectName)}`}
+                className="border-l-[3px] border-transparent bg-white px-[18px] py-4 transition-colors hover:bg-[#FBFBFA]"
+              >
+                <div className="mb-1.5 flex items-center gap-[7px]">
+                  <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-[#B4B2A9]" />
+                  <span className="text-sm font-semibold text-[#37352F]">
+                    {subjectName}
+                  </span>
+                </div>
+                <div className="mb-[3px] truncate text-[12.5px] text-[#6E6D68]">
+                  {offering.professor?.name ?? "교수 정보 없음"}
+                </div>
+                <div className="text-[11.5px] text-[#8E8C86]">
+                  {offering.semester
+                    ? `${offering.semester.year}-${offering.semester.term}`
+                    : ""}
+                </div>
+              </Link>
+            );
+          })}
         </div>
       )}
 
