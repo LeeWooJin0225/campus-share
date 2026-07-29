@@ -1,32 +1,234 @@
-import { supabase } from "@/lib/supabase";
+"use client";
 
-export default async function Home() {
-  const { data: subjects, error } = await supabase
-    .from("subjects")
-    .select("id, name, professor, semester");
+import Link from "next/link";
+import DashboardSidebar from "@/components/layout/DashboardSidebar";
+import styles from "./page.module.css";
 
-  if (error) {
-    return <div>에러: {error.message}</div>;
-  }
+type Subject = {
+  id: number;
+  name: string;
+  description: string;
+  period: string;
+  color: string;
+  notification?: boolean;
+};
 
+type RecentPost = {
+  id: number;
+  category: string;
+  categoryClass: string;
+  title: string;
+  author: string;
+  createdAt: string;
+  commentCount: number;
+};
+
+const subjects: Subject[] = [
+  {
+    id: 1,
+    name: "자료구조",
+    description: "트리와 이진탐색 정리",
+    period: "3시간 전",
+    color: "#ee9d72",
+    notification: true,
+  },
+  {
+    id: 2,
+    name: "운영체제",
+    description: "기말문제 3개년 모음",
+    period: "5시간 전",
+    color: "#8da58a",
+  },
+  {
+    id: 3,
+    name: "웹 프로그래밍",
+    description: "과제와 리액트 핵심 정리",
+    period: "1일 전",
+    color: "#c69a70",
+    notification: true,
+  },
+  {
+    id: 4,
+    name: "데이터베이스",
+    description: "정규화 배우고 회사 사례까지",
+    period: "1일 전",
+    color: "#75a0af",
+  },
+  {
+    id: 5,
+    name: "컴퓨터 네트워크",
+    description: "TCP 3-way handshake 정리",
+    period: "2일 전",
+    color: "#9aa7b5",
+  },
+  {
+    id: 6,
+    name: "확률통계",
+    description: "베이즈 정리, 실제 사례",
+    period: "3일 전",
+    color: "#9e8cb5",
+  },
+];
+
+const recentPosts: RecentPost[] = [
+  {
+    id: 1,
+    category: "Notes",
+    categoryClass: "notes",
+    title: "중간고사 범위 필기 정리 (1~5장)",
+    author: "황정동",
+    createdAt: "2시간 전",
+    commentCount: 3,
+  },
+  {
+    id: 2,
+    category: "Exam",
+    categoryClass: "exam",
+    title: "학년 기말고사 복원 문제",
+    author: "김계현",
+    createdAt: "1일 전",
+    commentCount: 14,
+  },
+  {
+    id: 3,
+    category: "↗ Study Trail",
+    categoryClass: "study",
+    title: "DB 정규화 배우고 실제 회사 사례까지 파봤어요",
+    author: "스터디원",
+    createdAt: "1일 전",
+    commentCount: 6,
+  },
+  {
+    id: 4,
+    category: "↗ Study Trail",
+    categoryClass: "study",
+    title: "트리 배우고 실제 파일시스템 구조까지 찾아봄",
+    author: "스터디원",
+    createdAt: "3일 전",
+    commentCount: 5,
+  },
+  {
+    id: 5,
+    category: "Notes",
+    categoryClass: "notes",
+    title: "리덕트 훅 완전 정복 (과제3 대비)",
+    author: "박고딩",
+    createdAt: "1일 전",
+    commentCount: 4,
+  },
+];
+
+export default function HomePage() {
   return (
-    <main className="p-10">
-      <h1 className="mb-6 text-3xl font-bold">📚 강의 목록</h1>
+    <main className={styles.page}>
+      <DashboardSidebar />
+      
+      <section className={styles.contentArea}>
+        <header className={styles.header}>
+          <div className={styles.searchArea}>
+            <span className={styles.searchIcon}>⌕</span>
 
-      {!subjects || subjects.length === 0 ? (
-        <p>등록된 강의가 없습니다.</p>
-      ) : (
-        subjects.map((subject) => (
-          <div
-            key={subject.id}
-            className="mb-4 rounded-lg border p-4 shadow"
-          >
-            <h2 className="text-xl font-semibold">{subject.name}</h2>
-            <p>교수: {subject.professor}</p>
-            <p>학기: {subject.semester}</p>
+            <input
+              type="search"
+              placeholder="과목명, 교수님, 노트 제목을 검색해보세요"
+              aria-label="노트 검색"
+            />
           </div>
-        ))
-      )}
+
+          <div className={styles.headerActions}>
+            <Link href="/notes/new" className={styles.newNoteButton}>
+              + 새 노트
+            </Link>
+
+            <button
+              type="button"
+              className={styles.profileButton}
+              aria-label="프로필"
+            >
+              나
+            </button>
+          </div>
+        </header>
+
+        <div className={styles.dashboard}>
+          <section className={styles.recentSubjectCard}>
+            <p className={styles.smallLabel}>이어서</p>
+
+            <Link href="/subjects/data-structure">
+              자료구조 · 트리와 이진탐색 정리
+            </Link>
+
+            <span>3분 전까지 보고 있었어요</span>
+          </section>
+
+          <section className={styles.subjectsSection}>
+            <h2>내 과목</h2>
+
+            <div className={styles.subjectGrid}>
+              {subjects.map((subject) => (
+                <Link
+                  href={`/subjects/${subject.id}`}
+                  key={subject.id}
+                  className={styles.subjectCard}
+                >
+                  <div className={styles.subjectCardHeader}>
+                    <div>
+                      <span
+                        className={styles.subjectDot}
+                        style={{
+                          backgroundColor: subject.color,
+                        }}
+                      />
+
+                      <strong>{subject.name}</strong>
+                    </div>
+
+                    {subject.notification && (
+                      <span className={styles.notificationDot} />
+                    )}
+                  </div>
+
+                  <p>{subject.description}</p>
+                  <span>{subject.period}</span>
+                </Link>
+              ))}
+            </div>
+          </section>
+
+          <section className={styles.recentSection}>
+            <h2>최근 학습 기록</h2>
+
+            <div className={styles.recentList}>
+              {recentPosts.map((post) => (
+                <Link
+                  href={`/posts/${post.id}`}
+                  key={post.id}
+                  className={styles.recentRow}
+                >
+                  <div className={styles.postMain}>
+                    <span
+                      className={`${styles.categoryBadge} ${styles[post.categoryClass]
+                        }`}
+                    >
+                      {post.category}
+                    </span>
+
+                    <strong>{post.title}</strong>
+                  </div>
+
+                  <div className={styles.postMeta}>
+                    <span>
+                      {post.author} · {post.createdAt}
+                    </span>
+
+                    <span>댓글 {post.commentCount}</span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        </div>
+      </section>
     </main>
   );
 }

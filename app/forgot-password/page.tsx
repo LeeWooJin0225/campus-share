@@ -1,7 +1,9 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { useState } from "react";
+import type { FormEvent } from "react";
 import Link from "next/link";
+
 import { supabase } from "@/lib/supabase";
 import styles from "./forgot-password.module.css";
 
@@ -26,8 +28,16 @@ export default function ForgotPasswordPage() {
     const schoolEmailRegex =
       /^[A-Za-z0-9._%+-]+@sungshin\.ac\.kr$/;
 
+    if (!trimmedEmail) {
+      setMessage("학교 이메일을 입력해주세요.");
+      setMessageType("error");
+      return;
+    }
+
     if (!schoolEmailRegex.test(trimmedEmail)) {
-      setMessage("성신여대 이메일을 입력해주세요.");
+      setMessage(
+        "@sungshin.ac.kr 형식의 학교 이메일을 입력해주세요."
+      );
       setMessageType("error");
       return;
     }
@@ -44,7 +54,10 @@ export default function ForgotPasswordPage() {
         );
 
       if (error) {
-        console.error("비밀번호 재설정 메일 오류:", error);
+        console.error(
+          "비밀번호 재설정 메일 오류:",
+          error
+        );
 
         setMessage(
           "메일을 보내지 못했습니다. 잠시 후 다시 시도해주세요."
@@ -71,111 +84,161 @@ export default function ForgotPasswordPage() {
 
   return (
     <main className={styles.page}>
-      <div className={styles.backgroundCircleOne} />
-      <div className={styles.backgroundCircleTwo} />
-
       <section className={styles.card}>
-        <Link
-          href="/login"
-          className={styles.backLink}
-        >
-          ← 로그인으로
-        </Link>
+        <div className={styles.leftSection}>
+          <Link href="/" className={styles.logo}>
+            <span className={styles.logoMark}>C</span>
+            <span>CampusShare</span>
+          </Link>
 
-        <div className={styles.iconWrap}>
-          <span className={styles.icon}>🔐</span>
-        </div>
+          <div className={styles.introArea}>
+            <p className={styles.eyebrow}>
+              PASSWORD RECOVERY
+            </p>
 
-        <div className={styles.heading}>
-          <p className={styles.brand}>CampusShare</p>
+            <h1 className={styles.introTitle}>
+              비밀번호를 잊어도
+              <br />
+              다시 시작할 수 있어요.
+            </h1>
 
-          <h1 className={styles.title}>
-            비밀번호를 잊으셨나요?
-          </h1>
+            <p className={styles.introDescription}>
+              가입할 때 사용한 학교 이메일로
+              비밀번호 재설정 링크를 보내드려요.
+              메일을 확인한 뒤 새로운 비밀번호를
+              설정해주세요.
+            </p>
 
-          <p className={styles.description}>
-            가입할 때 사용한 성신여대 이메일을
-            입력해주세요.
-            <br />
-            새 비밀번호를 설정할 수 있는 링크를
-            보내드릴게요.
-          </p>
-        </div>
+            <ul className={styles.stepList}>
+              <li>
+                <span className={styles.stepNumber}>1</span>
 
-        <form
-          className={styles.form}
-          onSubmit={handleResetPassword}
-          noValidate
-        >
-          <div className={styles.field}>
-            <label
-              htmlFor="email"
-              className={styles.label}
-            >
-              학교 이메일
-            </label>
+                <div>
+                  <strong>학교 이메일 입력</strong>
+                  <p>
+                    가입할 때 사용한 이메일을 입력해주세요.
+                  </p>
+                </div>
+              </li>
 
-            <div className={styles.inputWrap}>
-              <span className={styles.inputIcon}>✉</span>
+              <li>
+                <span className={styles.stepNumber}>2</span>
 
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                placeholder="example@sungshin.ac.kr"
-                className={styles.input}
-                value={email}
-                onChange={(event) =>
-                  setEmail(event.target.value)
-                }
-                disabled={isLoading}
-              />
-            </div>
+                <div>
+                  <strong>재설정 메일 확인</strong>
+                  <p>
+                    받은 메일 안의 버튼을 눌러주세요.
+                  </p>
+                </div>
+              </li>
+
+              <li>
+                <span className={styles.stepNumber}>3</span>
+
+                <div>
+                  <strong>새 비밀번호 설정</strong>
+                  <p>
+                    새로운 비밀번호로 다시 로그인할 수 있어요.
+                  </p>
+                </div>
+              </li>
+            </ul>
           </div>
 
-          {message && (
-            <div
-              className={`${styles.message} ${
-                messageType === "success"
-                  ? styles.successMessage
-                  : styles.errorMessage
-              }`}
-              role="alert"
-            >
-              {message}
-            </div>
-          )}
-
-          <button
-            type="submit"
-            className={styles.submitButton}
-            disabled={isLoading}
-          >
-            {isLoading
-              ? "메일 보내는 중..."
-              : "비밀번호 재설정 메일 받기"}
-          </button>
-        </form>
-
-        <div className={styles.notice}>
-          <span className={styles.noticeIcon}>💡</span>
-
-          <p>
-            메일이 보이지 않는다면 스팸 메일함도
-            확인해주세요.
+          <p className={styles.leftFooter}>
+            학교 이메일 인증 · 재학생·졸업생 전용
           </p>
         </div>
 
-        <p className={styles.bottomText}>
-          비밀번호가 기억났나요?
-          <Link
-            href="/login"
-            className={styles.loginLink}
-          >
-            로그인
-          </Link>
-        </p>
+        <div className={styles.rightSection}>
+          <div className={styles.formContainer}>
+            <Link
+              href="/login"
+              className={styles.backLink}
+            >
+              ← 로그인으로 돌아가기
+            </Link>
+
+            <header className={styles.formHeader}>
+              <div className={styles.lockIcon}>
+                <span>●</span>
+              </div>
+
+              <h2>비밀번호 재설정</h2>
+
+              <p>
+                가입한 학교 이메일을 입력해주세요.
+              </p>
+            </header>
+
+            <form
+              className={styles.form}
+              onSubmit={handleResetPassword}
+              noValidate
+            >
+              <div className={styles.formGroup}>
+                <label htmlFor="email">
+                  학교 이메일
+                </label>
+
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="student@sungshin.ac.kr"
+                  value={email}
+                  onChange={(event) =>
+                    setEmail(event.target.value)
+                  }
+                  disabled={isLoading}
+                />
+
+                <p className={styles.helperText}>
+                  @sungshin.ac.kr 도메인만 입력할 수 있어요.
+                </p>
+              </div>
+
+              {message && (
+                <div
+                  className={`${styles.message} ${
+                    messageType === "success"
+                      ? styles.successMessage
+                      : styles.errorMessage
+                  }`}
+                  role="alert"
+                  aria-live="polite"
+                >
+                  {message}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className={styles.submitButton}
+                disabled={isLoading}
+              >
+                {isLoading
+                  ? "메일 보내는 중..."
+                  : "비밀번호 재설정 메일 받기"}
+              </button>
+            </form>
+
+            <div className={styles.notice}>
+              <strong>메일이 보이지 않나요?</strong>
+
+              <p>
+                스팸 메일함과 프로모션 메일함도
+                함께 확인해주세요.
+              </p>
+            </div>
+
+            <p className={styles.bottomText}>
+              비밀번호가 기억났나요?
+              <Link href="/login">로그인</Link>
+            </p>
+          </div>
+        </div>
       </section>
     </main>
   );
