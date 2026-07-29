@@ -1,0 +1,21 @@
+.dashboardLayout {
+  display: grid;
+  min-height: 100vh;
+  grid-template-columns: 190px minmax(0, 1fr);
+  background: #fbfaf7;
+  color: #37342f;
+}
+
+.mainArea {
+  min-width: 0;
+}
+
+.content {
+  min-height: calc(100vh - 58px);
+}
+
+@media (max-width: 750px) {
+  .dashboardLayout {
+    display: block;
+  }
+}

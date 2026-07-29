@@ -1,0 +1,507 @@
+.page {
+  display: grid;
+  min-height: 100vh;
+  grid-template-columns: 190px minmax(0, 1fr);
+  background: #fbfaf7;
+  color: #37342f;
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  height: 100vh;
+  flex-direction: column;
+  padding: 18px 12px 15px;
+  border-right: 1px solid #e7e4dd;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.sidebarTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #35322d;
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.logoMark {
+  display: flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  background: #37342f;
+  color: #ffffff;
+  font-size: 8px;
+}
+
+.sidebarCollapse {
+  border: 0;
+  background: transparent;
+  color: #88837b;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.navigation {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.newNoteLink,
+.activeMenu,
+.menuLink {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 11px;
+  border-radius: 5px;
+  color: #6f6b64;
+  font-size: 11px;
+  text-decoration: none;
+}
+
+.newNoteLink {
+  margin-bottom: 4px;
+  background: #efeeeb;
+  color: #45413c;
+  font-weight: 700;
+}
+
+.activeMenu {
+  background: #e8e7e4;
+  color: #37342f;
+  font-weight: 800;
+}
+
+.menuLink:hover,
+.newNoteLink:hover {
+  background: #f2f1ee;
+}
+
+.subjectSection {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid #eeece7;
+}
+
+.sectionLabel {
+  margin: 0 0 10px;
+  padding-left: 8px;
+  color: #8d8880;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.subjectNavigation {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.subjectNavigation a {
+  display: flex;
+  min-height: 27px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border-radius: 5px;
+  color: #68645d;
+  font-size: 10px;
+  text-decoration: none;
+}
+
+.subjectNavigation a:hover {
+  background: #f5f4f1;
+}
+
+.subjectDot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+.myPageLink {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding: 9px 8px;
+  border-top: 1px solid #eeece7;
+  color: #77736c;
+  font-size: 10px;
+  text-decoration: none;
+}
+
+.contentArea {
+  min-width: 0;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  height: 48px;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  border-bottom: 1px solid #e9e6df;
+  background: rgba(255, 255, 255, 0.96);
+  box-sizing: border-box;
+}
+
+.searchArea {
+  position: relative;
+  flex: 1;
+}
+
+.searchArea input {
+  width: 100%;
+  height: 32px;
+  padding: 0 14px 0 34px;
+  border: 1px solid #e7e4dd;
+  border-radius: 7px;
+  outline: none;
+  background: #f6f5f2;
+  color: #46423c;
+  font-size: 10px;
+  box-sizing: border-box;
+}
+
+.searchArea input:focus {
+  border-color: #a5a098;
+  background: #ffffff;
+}
+
+.searchIcon {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  color: #aaa69e;
+  font-size: 12px;
+  transform: translateY(-50%);
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.newNoteButton {
+  display: flex;
+  height: 30px;
+  align-items: center;
+  padding: 0 13px;
+  border-radius: 6px;
+  background: #37342f;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.profileButton {
+  display: flex;
+  width: 29px;
+  height: 29px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: #37342f;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.dashboard {
+  padding: 24px;
+}
+
+.recentSubjectCard {
+  padding: 17px 18px;
+  border: 1px solid #e8e5df;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.smallLabel {
+  margin: 0 0 7px;
+  color: #99958f;
+  font-size: 9px;
+}
+
+.recentSubjectCard a {
+  display: block;
+  width: fit-content;
+  margin-bottom: 6px;
+  color: #37342f;
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.recentSubjectCard span {
+  color: #97928a;
+  font-size: 9px;
+}
+
+.subjectsSection,
+.recentSection {
+  margin-top: 23px;
+}
+
+.subjectsSection h2,
+.recentSection h2 {
+  margin: 0 0 9px;
+  color: #79756e;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.subjectGrid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(135px, 1fr));
+  gap: 7px;
+  overflow-x: auto;
+  padding-bottom: 3px;
+}
+
+.subjectCard {
+  min-width: 0;
+  padding: 13px 12px;
+  border: 1px solid #e6e3dd;
+  border-radius: 8px;
+  background: #ffffff;
+  color: inherit;
+  text-decoration: none;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.subjectCard:hover {
+  border-color: #bdb8af;
+  transform: translateY(-2px);
+}
+
+.subjectCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.subjectCardHeader div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.subjectCardHeader strong {
+  overflow: hidden;
+  color: #45413b;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notificationDot {
+  width: 5px;
+  height: 5px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #ef8025;
+}
+
+.subjectCard p {
+  overflow: hidden;
+  margin: 10px 0 6px;
+  color: #625e57;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subjectCard > span {
+  color: #a09b93;
+  font-size: 8px;
+}
+
+.recentList {
+  overflow: hidden;
+  border: 1px solid #e6e3dd;
+  border-radius: 9px;
+  background: #ffffff;
+}
+
+.recentRow {
+  display: grid;
+  min-height: 45px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 20px;
+  padding: 0 13px;
+  border-bottom: 1px solid #efede8;
+  color: inherit;
+  text-decoration: none;
+}
+
+.recentRow:last-child {
+  border-bottom: 0;
+}
+
+.recentRow:hover {
+  background: #faf9f6;
+}
+
+.postMain {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.postMain strong {
+  overflow: hidden;
+  color: #46423c;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.categoryBadge {
+  display: inline-flex;
+  min-width: 45px;
+  height: 21px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 8px;
+  box-sizing: border-box;
+}
+
+.notes {
+  background: #e6f0eb;
+  color: #557765;
+}
+
+.exam {
+  background: #f5e9dc;
+  color: #997048;
+}
+
+.study {
+  min-width: 68px;
+  background: #eee9f5;
+  color: #786693;
+}
+
+.postMeta {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  color: #969189;
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+@media (max-width: 1050px) {
+  .page {
+    grid-template-columns: 165px minmax(0, 1fr);
+  }
+
+  .subjectGrid {
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+  }
+}
+
+@media (max-width: 750px) {
+  .page {
+    display: block;
+  }
+
+  .sidebar {
+    position: static;
+    width: 100%;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid #e7e4dd;
+  }
+
+  .navigation,
+  .subjectSection,
+  .myPageLink,
+  .sidebarCollapse {
+    display: none;
+  }
+
+  .header {
+    position: static;
+  }
+
+  .dashboard {
+    padding: 16px;
+  }
+
+  .subjectGrid {
+    grid-template-columns: repeat(2, minmax(135px, 1fr));
+  }
+
+  .recentRow {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 11px 12px;
+  }
+
+  .postMeta {
+    padding-left: 57px;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 480px) {
+  .header {
+    height: auto;
+    flex-wrap: wrap;
+    padding: 10px;
+  }
+
+  .searchArea {
+    flex-basis: 100%;
+    order: 2;
+  }
+
+  .headerActions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .subjectGrid {
+    grid-template-columns: 1fr;
+  }
+}
