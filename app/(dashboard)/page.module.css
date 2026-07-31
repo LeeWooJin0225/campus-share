@@ -1,0 +1,128 @@
+.page {
+  height: 100%;
+  padding: 24px 26px 34px;
+  overflow-y: auto;
+  background: var(--cs-surface);
+  box-sizing: border-box;
+}
+
+.sectionLabel {
+  margin: 0 0 12px;
+  color: var(--cs-ink-soft);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.subjectGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 30px;
+}
+
+.subjectCard {
+  display: block;
+  padding: 14px 15px;
+  border: 1px solid var(--cs-border);
+  border-radius: var(--cs-radius-xl);
+  background: var(--cs-surface);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.1s;
+}
+
+.subjectCard:hover {
+  border-color: var(--cs-border-str);
+}
+
+.subjectName {
+  margin: 0;
+  color: var(--cs-ink);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.subjectMeta {
+  margin-top: 3px;
+  color: var(--cs-ink-faint);
+  font-size: 12px;
+}
+
+.subjectStatus {
+  margin-top: 14px;
+  color: var(--cs-ink-faint);
+  font-size: 11.5px;
+}
+
+.recentList {
+  border-top: 1px solid var(--cs-border);
+}
+
+.recentRow {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 4px;
+  border-bottom: 1px solid var(--cs-border);
+  color: inherit;
+  text-decoration: none;
+  transition: background 0.1s;
+}
+
+.recentRow:hover {
+  background: var(--cs-hover-row);
+}
+
+.recentTitle {
+  flex: 1;
+  overflow: hidden;
+  color: var(--cs-ink);
+  font-size: 13.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recentMeta {
+  flex-shrink: 0;
+  color: var(--cs-ink-faint);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.recentMetaGap {
+  margin-left: 12px;
+}
+
+@media (max-width: 1050px) {
+  .subjectGrid {
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+  }
+}
+
+@media (max-width: 750px) {
+  .page {
+    padding: 16px;
+  }
+
+  .subjectGrid {
+    grid-template-columns: repeat(2, minmax(135px, 1fr));
+  }
+
+  .recentRow {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 11px 12px;
+  }
+
+  .recentMeta {
+    width: 100%;
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .subjectGrid {
+    grid-template-columns: 1fr;
+  }
+}
