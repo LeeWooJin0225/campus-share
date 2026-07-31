@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import DashboardSidebar from "@/components/layout/DashboardSidebar";
+import DashboardHeader from "@/components/layout/DashboardHeader";
 import styles from "./page.module.css";
 
 type Subject = {
@@ -124,31 +125,7 @@ export default function HomePage() {
       <DashboardSidebar />
       
       <section className={styles.contentArea}>
-        <header className={styles.header}>
-          <div className={styles.searchArea}>
-            <span className={styles.searchIcon}>⌕</span>
-
-            <input
-              type="search"
-              placeholder="과목명, 교수님, 노트 제목을 검색해보세요"
-              aria-label="노트 검색"
-            />
-          </div>
-
-          <div className={styles.headerActions}>
-            <Link href="/notes/new" className={styles.newNoteButton}>
-              + 새 노트
-            </Link>
-
-            <button
-              type="button"
-              className={styles.profileButton}
-              aria-label="프로필"
-            >
-              나
-            </button>
-          </div>
-        </header>
+        <DashboardHeader />
 
         <div className={styles.dashboard}>
           <section className={styles.recentSubjectCard}>
