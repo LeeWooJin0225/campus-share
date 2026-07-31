@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 
 import { supabase } from "@/lib/supabase";
 import styles from "./new-note.module.css";
+import RichTextEditor from "@/components/editor/RichTextEditor";
 
 type PostType =
   | "notes"
@@ -26,33 +27,33 @@ type CourseRelation = {
   id: string;
   section: string | null;
   subjects:
-    | {
-        name: string;
-        subject_code: string | null;
-      }
-    | {
-        name: string;
-        subject_code: string | null;
-      }[]
-    | null;
+  | {
+    name: string;
+    subject_code: string | null;
+  }
+  | {
+    name: string;
+    subject_code: string | null;
+  }[]
+  | null;
   professors:
-    | {
-        name: string;
-      }
-    | {
-        name: string;
-      }[]
-    | null;
+  | {
+    name: string;
+  }
+  | {
+    name: string;
+  }[]
+  | null;
   semesters:
-    | {
-        year: number;
-        term: number;
-      }
-    | {
-        year: number;
-        term: number;
-      }[]
-    | null;
+  | {
+    year: number;
+    term: number;
+  }
+  | {
+    year: number;
+    term: number;
+  }[]
+  | null;
 };
 
 type UserCourseRow = {
@@ -173,13 +174,11 @@ export default function NewNotePage() {
 
             return {
               id: course.id,
-              label: `${
-                subject?.name ?? "과목명 없음"
-              }${
-                details.length > 0
+              label: `${subject?.name ?? "과목명 없음"
+                }${details.length > 0
                   ? ` · ${details.join(" · ")}`
                   : ""
-              }`,
+                }`,
             };
           })
           .filter(
@@ -234,11 +233,11 @@ export default function NewNotePage() {
         !files.some(
           (existingFile) =>
             existingFile.name ===
-              selectedFile.name &&
+            selectedFile.name &&
             existingFile.size ===
-              selectedFile.size &&
+            selectedFile.size &&
             existingFile.lastModified ===
-              selectedFile.lastModified,
+            selectedFile.lastModified,
         ),
     );
 
@@ -583,22 +582,11 @@ export default function NewNotePage() {
         <section
           className={styles.contentSection}
         >
-          <div className={styles.toolbar}>
-            <button type="button">
-              <strong>B</strong>
-            </button>
 
-            <button type="button">목록</button>
-            <button type="button">인용</button>
-            <button type="button">링크</button>
-          </div>
-
-          <textarea
+          <RichTextEditor
             value={content}
-            onChange={(event) =>
-              setContent(event.target.value)
-            }
-            placeholder="공유할 학습 내용을 입력해주세요."
+            onChange={setContent}
+            disabled={isSubmitting}
           />
 
           <footer

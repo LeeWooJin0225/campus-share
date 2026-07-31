@@ -15,6 +15,8 @@ import {
 import { supabase } from "@/lib/supabase";
 import styles from "./page.module.css";
 
+import DOMPurify from "dompurify";
+
 type PostType =
   | "notes"
   | "exam"
@@ -109,6 +111,8 @@ export default function PostDetailPage() {
     useState<string | null>(null);
   const [isBookmarked, setIsBookmarked] =
     useState(false);
+  const [currentUserId, setCurrentUserId] =
+    useState<string | null>(null);
 
   const [isLoading, setIsLoading] =
     useState(true);
@@ -178,6 +182,8 @@ export default function PostDetailPage() {
           router.replace("/login");
           return;
         }
+
+        setCurrentUserId(session.user.id);
 
         const {
           data: postData,
@@ -656,49 +662,53 @@ export default function PostDetailPage() {
             </div>
           </div>
 
-          <button
-            type="button"
-            className={
-              isBookmarked
-                ? styles.activeBookmarkButton
-                : styles.bookmarkButton
-            }
-            onClick={() =>
-              setIsBookmarked(
-                (previous) => !previous,
-              )
-            }
-          >
-            {isBookmarked
-              ? "★ 북마크됨"
-              : "☆ 북마크"}
-          </button>
+          <div className={styles.headerButtons}>
+            {currentUserId === post.author_id && (
+              <Link
+                href={`/posts/${post.id}/edit`}
+                className={styles.editButton}
+              >
+                글 수정
+              </Link>
+            )}
+
+            <button
+              type="button"
+              className={
+                isBookmarked
+                  ? styles.activeBookmarkButton
+                  : styles.bookmarkButton
+              }
+              onClick={() =>
+                setIsBookmarked(
+                  (previous) => !previous,
+                )
+              }
+            >
+              {isBookmarked
+                ? "★ 북마크됨"
+                : "☆ 북마크"}
+            </button>
+          </div>
         </header>
 
         <section className={styles.postBody}>
           {post.content ? (
-            post.content
-              .split("\n")
-              .map((line, index) =>
-                line.trim() ? (
-                  <p
-                    key={`${line}-${index}`}
-                  >
-                    {line}
-                  </p>
-                ) : (
-                  <div
-                    key={`space-${index}`}
-                    className={
-                      styles.blankLine
-                    }
-                  />
+            <div
+              className={styles.richTextContent}
+              dangerouslySetInnerHTML={{
+                __html: DOMPurify.sanitize(
+                  post.content,
+                  {
+                    USE_PROFILES: {
+                      html: true,
+                    },
+                  },
                 ),
-              )
+              }}
+            />
           ) : (
-            <p
-              className={styles.emptyContent}
-            >
+            <p className={styles.emptyContent}>
               작성된 본문이 없습니다.
             </p>
           )}

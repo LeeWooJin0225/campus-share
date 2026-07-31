@@ -1,0 +1,99 @@
+.editor {
+  overflow: hidden;
+  border: 1px solid #ddd8d0;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #ebe7df;
+  background: #f8f7f4;
+}
+
+.toolbar button {
+  min-width: 42px;
+  height: 30px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #68625a;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.toolbar button:hover {
+  background: #ece9e3;
+}
+
+.toolbar .activeButton {
+  background: #dedad3;
+  color: #393631;
+}
+
+.content {
+  min-height: 360px;
+}
+
+.content :global(.tiptap) {
+  min-height: 360px;
+  padding: 18px;
+  outline: none;
+  color: #4e4942;
+  font-size: 12px;
+  line-height: 1.75;
+}
+
+.content :global(.tiptap p) {
+  margin: 0 0 12px;
+}
+
+.content :global(.tiptap h2) {
+  margin: 24px 0 12px;
+  color: #34312d;
+  font-size: 21px;
+  line-height: 1.4;
+}
+
+.content :global(.tiptap ul),
+.content :global(.tiptap ol) {
+  margin: 12px 0;
+  padding-left: 24px;
+}
+
+.content :global(.tiptap blockquote) {
+  margin: 16px 0;
+  padding: 10px 14px;
+  border-left: 3px solid #aaa49a;
+  background: #f2f0ec;
+  color: #69635b;
+}
+
+.content :global(.tiptap pre) {
+  overflow-x: auto;
+  margin: 16px 0;
+  padding: 15px;
+  border-radius: 8px;
+  background: #292825;
+  color: #f3f0e9;
+}
+
+.content :global(.tiptap code) {
+  font-family: Consolas, "Courier New", monospace;
+}
+
+.loading {
+  display: flex;
+  min-height: 360px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #ddd8d0;
+  border-radius: 9px;
+  color: #99938b;
+  font-size: 10px;
+}
