@@ -1,24 +1,81 @@
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ── CampusShare Design Tokens ───────────────────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* ─ Backgrounds ─ */
+  --cs-bg:                #F4F4F5;
+  --cs-surface:           #FFFFFF;
+  --cs-sunk:              #EFEFF1;
+  --cs-sidebar-bg:        rgba(244, 244, 245, 0.5);
+  --cs-card-bg:           #F9F9FA;
+  --cs-hover-row:         rgba(0,0,0,0.02);
+  --cs-hover-nav:         rgba(0,0,0,0.04);
+
+  /* ─ Borders ─ */
+  --cs-border:            #E5E5E7;
+  --cs-border-str:        #D4D4D8;
+
+  /* ─ Text ─ */
+  --cs-ink:               #18181B;
+  --cs-ink-soft:          #52525B;
+  --cs-ink-faint:         #A1A1AA;
+  --cs-ink-body:          #27272A;
+
+  /* ─ Brand purple ─ */
+  --cs-purple:            #6D5DE7;
+  --cs-purple-hover:      #5A4DD6;
+  --cs-purple-dark:       #4F44B5;
+  --cs-purple-bg:         #EEEDFE;
+  --cs-purple-border:     #CECBF6;
+  --cs-purple-border-str: #C7C4F4;
+
+  /* ─ Semantic ─ */
+  --cs-error:             #B45309;
+
+  /* ─ Tag colors ─ */
+  --cs-notes-bg: #EEF3F9;   --cs-notes-fg: #2F5C8A;
+  --cs-exam-bg:  #F9EFEC;   --cs-exam-fg:  #8C4A31;
+  --cs-ref-bg:   #EAF3EF;   --cs-ref-fg:   #2C6A55;
+  --cs-trail-bg: #FAF1E3;   --cs-trail-fg: #7D5312;
+
+  /* ─ Border radius ─ */
+  --cs-radius-xs:       4px;
+  --cs-radius-sm:       5px;
+  --cs-radius-md:       6px;
+  --cs-radius-tag:      7px;
+  --cs-radius-lg:       8px;
+  --cs-radius-xl:       10px;
+  --cs-radius-2xl:      14px;
+  --cs-radius-pill:     20px;
+  --cs-radius-full:     50%;
+  --cs-radius-dropdown: 9px;
+
+  /* ─ Shadows ─ */
+  --cs-shadow-dropdown: 0 4px 16px rgba(55,53,47,0.08);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0; padding: 0; height: 100%;
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, 'Malgun Gothic', sans-serif;
+  background: var(--cs-bg);
+  color: var(--cs-ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--cs-border); border-radius: 9px; }
+::selection { background: var(--cs-purple-bg); color: var(--cs-purple-dark); }
 
 @layer utilities {
   .text-balance {

@@ -173,6 +173,7 @@ export default function DashboardSidebar() {
   }, [courses.length, isLoading]);
 
   const isHomeActive = pathname === "/";
+  const isMyPageActive = pathname === "/mypage";
 
   return (
     <aside className={styles.sidebar}>
@@ -181,9 +182,7 @@ export default function DashboardSidebar() {
           href="/"
           className={styles.logo}
         >
-          <span className={styles.logoMark}>
-            C
-          </span>
+          <span className={styles.logoMark} />
 
           <span>CampusShare</span>
         </Link>
@@ -214,7 +213,6 @@ export default function DashboardSidebar() {
               : styles.menuLink
           }
         >
-          <span>●</span>
           홈
         </Link>
 
@@ -226,7 +224,6 @@ export default function DashboardSidebar() {
               : styles.menuLink
           }
         >
-          <span>⌕</span>
           전체 과목 검색
         </Link>
 
@@ -238,7 +235,6 @@ export default function DashboardSidebar() {
               : styles.menuLink
           }
         >
-          <span>◇</span>
           북마크
         </Link>
       </nav>
@@ -292,13 +288,22 @@ export default function DashboardSidebar() {
               </li>
             )}
         </ul>
+
+        <Link
+          href="/materials"
+          className={styles.addSubject}
+        >
+          ＋ 내 과목 추가
+        </Link>
       </section>
 
       <Link
         href="/mypage"
-        className={styles.myPageLink}
+        className={`${styles.myPageLink} ${
+          isMyPageActive ? styles.myPageActive : ""
+        }`}
       >
-        <span>●</span>
+        <span className={styles.avatar}>나</span>
         마이페이지
       </Link>
     </aside>

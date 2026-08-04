@@ -2,108 +2,147 @@
   position: sticky;
   top: 0;
   display: flex;
-  width: 190px;
-  height: 100vh;
   flex-direction: column;
-  padding: 18px 12px 15px;
-  border-right: 1px solid #e7e4dd;
-  background: #ffffff;
+  width: 224px;
+  height: 100vh;
+  flex-shrink: 0;
+  padding: 16px 12px;
+  gap: 20px;
+  background: var(--cs-sidebar-bg);
+  border-right: 1px solid var(--cs-border);
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .sidebarTop {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 19px;
+  padding: 0 4px;
 }
 
 .logo {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: #35322d;
-  font-size: 12px;
-  font-weight: 800;
+  color: var(--cs-ink);
+  font-size: 15px;
+  font-weight: 600;
   text-decoration: none;
+  overflow: hidden;
 }
 
 .logoMark {
-  display: flex;
-  width: 20px;
-  height: 20px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 5px;
-  background: #37342f;
-  color: #ffffff;
-  font-size: 9px;
+  width: 19px;
+  height: 19px;
+  border-radius: var(--cs-radius-sm);
+  background: var(--cs-purple);
+  flex-shrink: 0;
 }
 
 .collapseButton {
   border: 0;
-  background: transparent;
-  color: #88837b;
-  font-size: 17px;
+  background: none;
+  color: var(--cs-ink-faint);
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: var(--cs-radius-xs);
+  line-height: 1;
   cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.collapseButton:hover {
+  background: var(--cs-hover-nav);
+  color: var(--cs-ink);
 }
 
 .navigation {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-}
-
-.newNoteLink,
-.activeMenu,
-.menuLink {
-  display: flex;
-  min-height: 35px;
-  align-items: center;
-  gap: 9px;
-  padding: 0 11px;
-  border-radius: 6px;
-  color: #6f6b64;
-  font-size: 11px;
-  text-decoration: none;
+  gap: 1px;
 }
 
 .newNoteLink {
-  margin-bottom: 5px;
-  background: #efeeeb;
-  color: #45413c;
-  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px;
+  margin-bottom: 4px;
+  border-radius: var(--cs-radius-lg);
+  border: 1px solid var(--cs-border-str);
+  background: var(--cs-surface);
+  color: var(--cs-ink);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.12s;
+}
+
+.newNoteLink:hover {
+  background: var(--cs-bg);
+}
+
+.activeMenu,
+.menuLink {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  border-radius: var(--cs-radius-md);
+  font-size: 13px;
+  text-decoration: none;
+  transition: background 0.1s, color 0.1s;
+}
+
+.menuLink {
+  color: var(--cs-ink-soft);
+  font-weight: 400;
+  background: transparent;
+}
+
+.menuLink:hover {
+  background: var(--cs-hover-nav);
+  color: var(--cs-ink);
 }
 
 .activeMenu {
-  background: #e8e7e4;
-  color: #37342f;
-  font-weight: 800;
+  color: var(--cs-purple-dark);
+  font-weight: 500;
+  background: var(--cs-purple-bg);
 }
 
-.menuLink:hover,
-.newNoteLink:hover {
-  background: #f2f1ee;
+.badge {
+  font-size: 11.5px;
+  color: var(--cs-ink-faint);
 }
 
 .subjectSection {
-  margin-top: 20px;
-  padding-top: 15px;
-  border-top: 1px solid #eeece7;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
 }
 
 .sectionLabel {
-  margin: 0 0 10px;
-  padding-left: 8px;
-  color: #8d8880;
-  font-size: 9px;
-  font-weight: 700;
+  margin: 0;
+  padding: 0 10px 7px;
+  color: var(--cs-ink-faint);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
 }
 
 .subjectList {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -111,56 +150,97 @@
 
 .subjectList a {
   display: flex;
-  min-height: 29px;
   align-items: center;
-  gap: 8px;
-  padding: 0 8px;
-  border-radius: 5px;
-  color: #68645d;
-  font-size: 10px;
+  padding: 7px 10px;
+  border-radius: var(--cs-radius-md);
+  color: var(--cs-ink-soft);
+  font-size: 13px;
+  font-weight: 400;
   text-decoration: none;
+  transition: background 0.1s, color 0.1s;
 }
 
 .subjectList a:hover {
-  background: #f5f4f1;
+  background: var(--cs-hover-nav);
+  color: var(--cs-ink);
 }
 
 .subjectList .activeSubject {
-  background: #e8e7e4;
-  color: #37342f;
-  font-weight: 800;
+  background: var(--cs-purple-bg);
+  color: var(--cs-purple-dark);
+  font-weight: 500;
 }
 
 .subjectDot {
   display: inline-block;
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: var(--cs-radius-full);
   flex-shrink: 0;
-  border-radius: 50%;
 }
 
 .emptySubject {
-  padding: 7px 8px;
-  color: #aaa59d;
-  font-size: 9px;
+  padding: 7px 10px;
+  color: var(--cs-ink-faint);
+  font-size: 12px;
+}
+
+.addSubject {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin-top: 7px;
+  padding: 7px 10px;
+  border: 1px dashed var(--cs-border-str);
+  border-radius: var(--cs-radius-md);
+  color: var(--cs-purple);
+  font-size: 12.5px;
+  text-decoration: none;
+  transition: border-color 0.1s;
+}
+
+.addSubject:hover {
+  border-color: var(--cs-purple);
 }
 
 .myPageLink {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   margin-top: auto;
-  padding: 12px 8px 4px;
-  border-top: 1px solid #eeece7;
-  color: #77736c;
-  font-size: 10px;
+  padding: 10px 6px;
+  border-top: 1px solid var(--cs-border);
+  border-radius: var(--cs-radius-md);
+  color: var(--cs-ink-soft);
+  font-size: 13px;
   text-decoration: none;
+  transition: background 0.1s;
 }
 
-.subjectList .activeSubject {
-  background: #e8e7e4;
-  color: #37342f;
-  font-weight: 800;
+.myPageLink:hover {
+  background: var(--cs-hover-nav);
+}
+
+.myPageActive {
+  background: var(--cs-purple-bg);
+  color: var(--cs-purple-dark);
+  font-weight: 500;
+}
+
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--cs-radius-full);
+  background: var(--cs-purple-bg);
+  color: var(--cs-purple-dark);
+  font-size: 11px;
+  font-weight: 500;
+  flex-shrink: 0;
 }
 
 @media (max-width: 750px) {
@@ -169,7 +249,7 @@
     width: 100%;
     height: auto;
     border-right: 0;
-    border-bottom: 1px solid #e7e4dd;
+    border-bottom: 1px solid var(--cs-border);
   }
 
   .navigation,

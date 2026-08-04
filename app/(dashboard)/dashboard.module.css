@@ -1,14 +1,9 @@
 .dashboardLayout {
   display: grid;
   min-height: 100vh;
-  grid-template-columns: 190px minmax(0, 1fr);
-  background: #fbfaf7;
-  color: #37342f;
-  transition: grid-template-columns 0.2s ease;
-}
-
-.sidebarCollapsed {
-  grid-template-columns: 64px minmax(0, 1fr);
+  grid-template-columns: 224px minmax(0, 1fr);
+  background: var(--cs-bg);
+  color: var(--cs-ink);
 }
 
 .mainArea {
