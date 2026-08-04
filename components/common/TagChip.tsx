@@ -1,8 +1,16 @@
-type TagType = "notes" | "exam" | "reference" | "trail";
+export type TagType =
+  | "notes"
+  | "exam"
+  | "reference"
+  | "study_trail";
 
-const TAG_CONFIG: Record <
+const TAG_CONFIG: Record<
   TagType,
-  { label: string; bg: string; color: string }
+  {
+    label: string;
+    bg: string;
+    color: string;
+  }
 > = {
   notes: {
     label: "Notes",
@@ -19,7 +27,7 @@ const TAG_CONFIG: Record <
     bg: "var(--cs-ref-bg)",
     color: "var(--cs-ref-fg)",
   },
-  trail: {
+  study_trail: {
     label: "Study Trail",
     bg: "var(--cs-trail-bg)",
     color: "var(--cs-trail-fg)",
@@ -31,7 +39,10 @@ type TagChipProps = {
   size?: "sm" | "md";
 };
 
-export default function TagChip({ tag, size = "sm" }: TagChipProps) {
+export default function TagChip({
+  tag,
+  size = "sm",
+}: TagChipProps) {
   const cfg = TAG_CONFIG[tag];
 
   return (
@@ -42,8 +53,12 @@ export default function TagChip({ tag, size = "sm" }: TagChipProps) {
         color: cfg.color,
         fontSize: size === "md" ? 12 : 11,
         fontWeight: 500,
-        padding: size === "md" ? "3px 8px" : "2.5px 7px",
-        borderRadius: "var(--cs-radius-xs)",
+        padding:
+          size === "md"
+            ? "3px 8px"
+            : "2.5px 7px",
+        borderRadius:
+          "var(--cs-radius-xs)",
         whiteSpace: "nowrap",
         flexShrink: 0,
       }}

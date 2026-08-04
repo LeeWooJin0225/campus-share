@@ -11,7 +11,7 @@ type Subject = {
   period: string;
 };
 
-type PostCategory = "notes" | "exam" | "trail";
+type PostCategory = "notes" | "exam" | "study_trail";
 
 type RecentPost = {
   id: number;
@@ -80,7 +80,7 @@ const recentPosts: RecentPost[] = [
   },
   {
     id: 3,
-    category: "trail",
+    category: "study_trail",
     title: "DB 정규화 배우고 실제 회사 사례까지 파봤어요",
     author: "스터디원",
     createdAt: "1일 전",
@@ -88,7 +88,7 @@ const recentPosts: RecentPost[] = [
   },
   {
     id: 4,
-    category: "trail",
+    category: "study_trail",
     title: "트리 배우고 실제 파일시스템 구조까지 찾아봄",
     author: "스터디원",
     createdAt: "3일 전",
