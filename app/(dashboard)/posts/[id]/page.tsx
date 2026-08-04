@@ -114,6 +114,15 @@ export default function PostDetailPage() {
   const [currentUserId, setCurrentUserId] =
     useState<string | null>(null);
 
+  const [editingCommentId, setEditingCommentId] =
+    useState<string | null>(null);
+  const [editingCommentText, setEditingCommentText] =
+    useState("");
+  const [isSavingCommentEdit, setIsSavingCommentEdit] =
+    useState(false);
+  const [deletingCommentId, setDeletingCommentId] =
+    useState<string | null>(null);
+
   const [isLoading, setIsLoading] =
     useState(true);
   const [
@@ -561,6 +570,172 @@ export default function PostDetailPage() {
     }
   };
 
+  const openEditForm = (
+    comment: CommentItem,
+  ) => {
+    setEditingCommentId(comment.id);
+    setEditingCommentText(comment.content);
+    setReplyingToId(null);
+    setReplyText("");
+  };
+
+  const cancelEditForm = () => {
+    setEditingCommentId(null);
+    setEditingCommentText("");
+  };
+
+  const handleCommentEditSubmit = async (
+    event: FormEvent<HTMLFormElement>,
+    commentId: string,
+  ) => {
+    event.preventDefault();
+
+    const trimmedContent =
+      editingCommentText.trim();
+
+    if (!trimmedContent) {
+      alert("댓글 내용을 입력해주세요.");
+      return;
+    }
+
+    try {
+      setIsSavingCommentEdit(true);
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        throw userError;
+      }
+
+      if (!user) {
+        router.replace("/login");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("comments")
+        .update({
+          content: trimmedContent,
+        })
+        .eq("id", commentId)
+        .eq("author_id", user.id);
+
+      if (error) {
+        throw error;
+      }
+
+      setComments((previous) =>
+        previous.map((comment) =>
+          comment.id === commentId
+            ? {
+                ...comment,
+                content: trimmedContent,
+              }
+            : comment,
+        ),
+      );
+
+      cancelEditForm();
+    } catch (error) {
+      console.error(
+        "댓글 수정 실패:",
+        error,
+      );
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : "댓글을 수정하지 못했습니다.",
+      );
+    } finally {
+      setIsSavingCommentEdit(false);
+    }
+  };
+
+  const handleCommentDelete = async (
+    comment: CommentItem,
+  ) => {
+    const replies =
+      repliesByParent.get(comment.id) ?? [];
+
+    if (
+      comment.parent_comment_id === null &&
+      replies.length > 0
+    ) {
+      alert(
+        "답글이 달린 댓글은 삭제할 수 없습니다. 댓글 내용을 수정해주세요.",
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "이 댓글을 삭제하시겠습니까?",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDeletingCommentId(comment.id);
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        throw userError;
+      }
+
+      if (!user) {
+        router.replace("/login");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("comments")
+        .delete()
+        .eq("id", comment.id)
+        .eq("author_id", user.id);
+
+      if (error) {
+        throw error;
+      }
+
+      setComments((previous) =>
+        previous.filter(
+          (item) => item.id !== comment.id,
+        ),
+      );
+
+      if (editingCommentId === comment.id) {
+        cancelEditForm();
+      }
+
+      if (replyingToId === comment.id) {
+        setReplyingToId(null);
+        setReplyText("");
+      }
+    } catch (error) {
+      console.error(
+        "댓글 삭제 실패:",
+        error,
+      );
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : "댓글을 삭제하지 못했습니다.",
+      );
+    } finally {
+      setDeletingCommentId(null);
+    }
+  };
+
   const openReplyForm = (
     commentId: string,
   ) => {
@@ -846,26 +1021,136 @@ export default function PostDetailPage() {
                             </span>
                           </div>
 
-                          <p>
-                            {comment.content}
-                          </p>
+                          {editingCommentId ===
+                          comment.id ? (
+                            <form
+                              className={
+                                styles.commentEditForm
+                              }
+                              onSubmit={(event) =>
+                                handleCommentEditSubmit(
+                                  event,
+                                  comment.id,
+                                )
+                              }
+                            >
+                              <textarea
+                                value={
+                                  editingCommentText
+                                }
+                                onChange={(event) =>
+                                  setEditingCommentText(
+                                    event.target.value,
+                                  )
+                                }
+                                maxLength={1000}
+                                autoFocus
+                              />
 
-                          <button
-                            type="button"
-                            className={
-                              styles.replyToggle
-                            }
-                            onClick={() =>
-                              openReplyForm(
-                                comment.id,
-                              )
-                            }
-                          >
-                            답글
-                            {replies.length >
-                              0 &&
-                              ` ${replies.length}`}
-                          </button>
+                              <div
+                                className={
+                                  styles.commentEditActions
+                                }
+                              >
+                                <button
+                                  type="button"
+                                  className={
+                                    styles.commentCancelButton
+                                  }
+                                  onClick={
+                                    cancelEditForm
+                                  }
+                                >
+                                  취소
+                                </button>
+
+                                <button
+                                  type="submit"
+                                  className={
+                                    styles.commentSaveButton
+                                  }
+                                  disabled={
+                                    !editingCommentText.trim() ||
+                                    isSavingCommentEdit
+                                  }
+                                >
+                                  {isSavingCommentEdit
+                                    ? "저장 중..."
+                                    : "수정 완료"}
+                                </button>
+                              </div>
+                            </form>
+                          ) : (
+                            <p>
+                              {comment.content}
+                            </p>
+                          )}
+
+                          {editingCommentId !==
+                            comment.id && (
+                            <div
+                              className={
+                                styles.commentActions
+                              }
+                            >
+                              <button
+                                type="button"
+                                className={
+                                  styles.replyToggle
+                                }
+                                onClick={() =>
+                                  openReplyForm(
+                                    comment.id,
+                                  )
+                                }
+                              >
+                                답글
+                                {replies.length >
+                                  0 &&
+                                  ` ${replies.length}`}
+                              </button>
+
+                              {currentUserId ===
+                                comment.author_id && (
+                                <>
+                                  <button
+                                    type="button"
+                                    className={
+                                      styles.commentActionButton
+                                    }
+                                    onClick={() =>
+                                      openEditForm(
+                                        comment,
+                                      )
+                                    }
+                                  >
+                                    수정
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    className={
+                                      styles.commentDeleteButton
+                                    }
+                                    onClick={() =>
+                                      handleCommentDelete(
+                                        comment,
+                                      )
+                                    }
+                                    disabled={
+                                      deletingCommentId ===
+                                      comment.id
+                                    }
+                                  >
+                                    {deletingCommentId ===
+                                    comment.id
+                                      ? "삭제 중..."
+                                      : "삭제"}
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
 
                           {replyingToId ===
                             comment.id && (
@@ -1001,11 +1286,118 @@ export default function PostDetailPage() {
                                     </span>
                                   </div>
 
-                                  <p>
-                                    {
-                                      reply.content
-                                    }
-                                  </p>
+                                  {editingCommentId ===
+                                  reply.id ? (
+                                    <form
+                                      className={
+                                        styles.commentEditForm
+                                      }
+                                      onSubmit={(event) =>
+                                        handleCommentEditSubmit(
+                                          event,
+                                          reply.id,
+                                        )
+                                      }
+                                    >
+                                      <textarea
+                                        value={
+                                          editingCommentText
+                                        }
+                                        onChange={(event) =>
+                                          setEditingCommentText(
+                                            event.target.value,
+                                          )
+                                        }
+                                        maxLength={1000}
+                                        autoFocus
+                                      />
+
+                                      <div
+                                        className={
+                                          styles.commentEditActions
+                                        }
+                                      >
+                                        <button
+                                          type="button"
+                                          className={
+                                            styles.commentCancelButton
+                                          }
+                                          onClick={
+                                            cancelEditForm
+                                          }
+                                        >
+                                          취소
+                                        </button>
+
+                                        <button
+                                          type="submit"
+                                          className={
+                                            styles.commentSaveButton
+                                          }
+                                          disabled={
+                                            !editingCommentText.trim() ||
+                                            isSavingCommentEdit
+                                          }
+                                        >
+                                          {isSavingCommentEdit
+                                            ? "저장 중..."
+                                            : "수정 완료"}
+                                        </button>
+                                      </div>
+                                    </form>
+                                  ) : (
+                                    <>
+                                      <p>
+                                        {
+                                          reply.content
+                                        }
+                                      </p>
+
+                                      {currentUserId ===
+                                        reply.author_id && (
+                                        <div
+                                          className={
+                                            styles.commentActions
+                                          }
+                                        >
+                                          <button
+                                            type="button"
+                                            className={
+                                              styles.commentActionButton
+                                            }
+                                            onClick={() =>
+                                              openEditForm(
+                                                reply,
+                                              )
+                                            }
+                                          >
+                                            수정
+                                          </button>
+
+                                          <button
+                                            type="button"
+                                            className={
+                                              styles.commentDeleteButton
+                                            }
+                                            onClick={() =>
+                                              handleCommentDelete(
+                                                reply,
+                                              )
+                                            }
+                                            disabled={
+                                              deletingCommentId ===
+                                              reply.id
+                                            }
+                                          >
+                                            {deletingCommentId ===
+                                            reply.id
+                                              ? "삭제 중..."
+                                              : "삭제"}
+                                          </button>
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
                                 </div>
                               </li>
                             ),

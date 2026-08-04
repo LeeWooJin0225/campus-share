@@ -4,6 +4,11 @@
   grid-template-columns: 190px minmax(0, 1fr);
   background: #fbfaf7;
   color: #37342f;
+  transition: grid-template-columns 0.2s ease;
+}
+
+.sidebarCollapsed {
+  grid-template-columns: 64px minmax(0, 1fr);
 }
 
 .mainArea {
@@ -15,7 +20,8 @@
 }
 
 @media (max-width: 750px) {
-  .dashboardLayout {
+  .dashboardLayout,
+  .sidebarCollapsed {
     display: block;
   }
 }
