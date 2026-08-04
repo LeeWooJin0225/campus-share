@@ -15,7 +15,8 @@
 }
 
 @media (max-width: 750px) {
-  .dashboardLayout {
+  .dashboardLayout,
+  .sidebarCollapsed {
     display: block;
   }
 }
