@@ -91,10 +91,6 @@ export default function DashboardHeader() {
   return (
     <header className={styles.header}>
       <div className={styles.searchArea}>
-        <span className={styles.searchIcon}>
-          ⌕
-        </span>
-
         <input
           type="search"
           placeholder="과목명, 교수님, 노트 제목을 검색해보세요"
@@ -107,7 +103,7 @@ export default function DashboardHeader() {
           href="/notes/new"
           className={styles.newNoteButton}
         >
-          + 새 노트
+          ＋ 새 노트
         </Link>
 
         <div

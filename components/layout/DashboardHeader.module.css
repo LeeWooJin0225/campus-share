@@ -3,94 +3,171 @@
   top: 0;
   z-index: 20;
   display: flex;
-  height: 58px;
   align-items: center;
-  gap: 14px;
-  padding: 0 22px;
-  border-bottom: 1px solid #e9e6df;
-  background: rgba(255, 255, 255, 0.97);
+  gap: 10px;
+  padding: 13px 26px;
+  border-bottom: 1px solid var(--cs-border);
+  background: var(--cs-surface);
   box-sizing: border-box;
 }
 
 .searchArea {
-  position: relative;
   flex: 1;
+  display: flex;
+  align-items: center;
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-border-str);
+  border-radius: var(--cs-radius-lg);
+  padding: 8px 12px;
 }
 
 .searchArea input {
+  flex: 1;
   width: 100%;
-  height: 36px;
-  padding: 0 14px 0 38px;
-  border: 1px solid #e3e0d9;
-  border-radius: 8px;
+  border: none;
   outline: none;
-  background: #f6f5f2;
-  color: #46423c;
-  font-size: 12px;
-  box-sizing: border-box;
+  background: none;
+  color: var(--cs-ink-body);
+  font-size: 13px;
+  font-family: inherit;
 }
 
 .searchArea input::placeholder {
-  color: #aaa69e;
-}
-
-.searchArea input:focus {
-  border-color: #9a958c;
-  background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(69, 65, 59, 0.06);
-}
-
-.searchIcon {
-  position: absolute;
-  top: 50%;
-  left: 13px;
-  color: #aaa69e;
-  font-size: 14px;
-  transform: translateY(-50%);
+  color: var(--cs-ink-faint);
 }
 
 .headerActions {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
 }
 
 .newNoteButton {
   display: flex;
-  height: 34px;
   align-items: center;
-  padding: 0 15px;
-  border-radius: 7px;
-  background: #37342f;
-  color: #ffffff;
-  font-size: 11px;
-  font-weight: 800;
+  padding: 8px 15px;
+  border-radius: var(--cs-radius-lg);
+  background: var(--cs-purple);
+  color: var(--cs-surface);
+  font-size: 13px;
+  font-weight: 500;
   text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.12s;
 }
 
 .newNoteButton:hover {
-  background: #24221e;
+  background: var(--cs-purple-hover);
 }
 
-.profileButton {
-  display: flex;
-  width: 32px;
-  height: 32px;
+.userMenuWrapper {
+  position: relative;
+}
+
+.userButton {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 0;
-  border-radius: 50%;
-  background: #37342f;
-  color: #ffffff;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--cs-radius-full);
+  background: var(--cs-purple-bg);
+  color: var(--cs-purple-dark);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 500;
   cursor: pointer;
+  transition: background 0.12s;
+}
+
+.userButton:hover {
+  background: var(--cs-purple-border);
+}
+
+.userMenu {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 190px;
+  overflow: hidden;
+  border: 1px solid var(--cs-border);
+  border-radius: var(--cs-radius-dropdown);
+  background: var(--cs-surface);
+  box-shadow: var(--cs-shadow-dropdown);
+}
+
+.userMenuHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border-bottom: 1px solid var(--cs-border);
+}
+
+.userAvatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--cs-radius-full);
+  background: var(--cs-purple-bg);
+  color: var(--cs-purple-dark);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.userMenuHeader strong,
+.userMenuHeader span {
+  display: block;
+}
+
+.userMenuHeader strong {
+  color: var(--cs-ink);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.userMenuHeader span {
+  margin-top: 3px;
+  color: var(--cs-ink-faint);
+  font-size: 11px;
+}
+
+.logoutButton {
+  display: flex;
+  width: 100%;
+  min-height: 40px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 14px;
+  border: none;
+  background: var(--cs-surface);
+  color: var(--cs-ink-soft);
+  font-size: 12px;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.logoutButton:hover:not(:disabled) {
+  background: var(--cs-hover-row);
+  color: var(--cs-ink);
+}
+
+.logoutButton:disabled {
+  color: var(--cs-ink-faint);
+  cursor: not-allowed;
 }
 
 @media (max-width: 750px) {
   .header {
     position: static;
-    height: auto;
     flex-wrap: wrap;
     padding: 12px;
   }
@@ -104,113 +181,4 @@
     width: 100%;
     justify-content: flex-end;
   }
-}
-
-.userMenuWrapper {
-  position: relative;
-}
-
-.userButton {
-  display: inline-flex;
-  width: 34px;
-  height: 34px;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 1px solid #ded9d1;
-  border-radius: 50%;
-  background: #ebe8e2;
-  color: #575149;
-  font-size: 10px;
-  font-weight: 800;
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease;
-}
-
-.userButton:hover {
-  border-color: #bdb7ae;
-  background: #dfdcd5;
-}
-
-.userMenu {
-  position: absolute;
-  z-index: 50;
-  top: calc(100% + 10px);
-  right: 0;
-  width: 190px;
-  overflow: hidden;
-  border: 1px solid #dedad2;
-  border-radius: 9px;
-  background: #fff;
-  box-shadow:
-    0 10px 30px rgba(41, 38, 34, 0.11);
-}
-
-.userMenuHeader {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px;
-  border-bottom: 1px solid #ece8e1;
-}
-
-.userAvatar {
-  display: flex;
-  width: 32px;
-  height: 32px;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border-radius: 50%;
-  background: #ebe8e2;
-  color: #575149;
-  font-size: 9px;
-  font-weight: 800;
-}
-
-.userMenuHeader strong,
-.userMenuHeader span {
-  display: block;
-}
-
-.userMenuHeader strong {
-  color: #49443e;
-  font-size: 10px;
-}
-
-.userMenuHeader span {
-  margin-top: 3px;
-  color: #a09a92;
-  font-size: 8px;
-}
-
-.logoutButton {
-  display: flex;
-  width: 100%;
-  min-height: 42px;
-  align-items: center;
-  gap: 9px;
-  padding: 0 14px;
-  border: 0;
-  background: #fff;
-  color: #6a625b;
-  font-size: 9px;
-  font-weight: 700;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    color 0.15s ease;
-}
-
-.logoutButton:hover:not(:disabled) {
-  background: #f5f3ef;
-  color: #3e3934;
-}
-
-.logoutButton:disabled {
-  color: #aaa59d;
-  cursor: not-allowed;
 }
