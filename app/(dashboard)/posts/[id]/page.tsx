@@ -111,6 +111,8 @@ export default function PostDetailPage() {
     useState<string | null>(null);
   const [isBookmarked, setIsBookmarked] =
     useState(false);
+  const [isSavingBookmark, setIsSavingBookmark] =
+    useState(false);
   const [currentUserId, setCurrentUserId] =
     useState<string | null>(null);
 
@@ -225,6 +227,7 @@ export default function PostDetailPage() {
           courseResult,
           attachmentResult,
           commentResult,
+          bookmarkResult,
         ] = await Promise.all([
           supabase
             .from("profiles")
@@ -273,6 +276,13 @@ export default function PostDetailPage() {
             .order("created_at", {
               ascending: true,
             }),
+
+          supabase
+            .from("bookmarks")
+            .select("id")
+            .eq("user_id", session.user.id)
+            .eq("post_id", postId)
+            .maybeSingle(),
         ]);
 
         if (profileResult.error) {
@@ -290,6 +300,14 @@ export default function PostDetailPage() {
         if (commentResult.error) {
           throw commentResult.error;
         }
+
+        if (bookmarkResult.error) {
+          throw bookmarkResult.error;
+        }
+
+        setIsBookmarked(
+          Boolean(bookmarkResult.data),
+        );
 
         const profile =
           profileResult.data as ProfileRow | null;
@@ -418,6 +436,70 @@ export default function PostDetailPage() {
       void loadPost();
     }
   }, [postId, router]);
+
+  const handleBookmarkToggle = async () => {
+    if (isSavingBookmark) {
+      return;
+    }
+
+    try {
+      setIsSavingBookmark(true);
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        throw userError;
+      }
+
+      if (!user) {
+        router.replace("/login");
+        return;
+      }
+
+      if (isBookmarked) {
+        const { error } = await supabase
+          .from("bookmarks")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("post_id", postId);
+
+        if (error) {
+          throw error;
+        }
+
+        setIsBookmarked(false);
+      } else {
+        const { error } = await supabase
+          .from("bookmarks")
+          .insert({
+            user_id: user.id,
+            post_id: postId,
+          });
+
+        if (error) {
+          throw error;
+        }
+
+        setIsBookmarked(true);
+      }
+    } catch (error) {
+      console.error(
+        "북마크 변경 실패:",
+        error,
+      );
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : "북마크를 변경하지 못했습니다.",
+      );
+    } finally {
+      setIsSavingBookmark(false);
+    }
+  };
 
   const createComment = async (
     content: string,
@@ -855,14 +937,16 @@ export default function PostDetailPage() {
                   : styles.bookmarkButton
               }
               onClick={() =>
-                setIsBookmarked(
-                  (previous) => !previous,
-                )
+                void handleBookmarkToggle()
               }
+              disabled={isSavingBookmark}
+              aria-pressed={isBookmarked}
             >
-              {isBookmarked
-                ? "★ 북마크됨"
-                : "☆ 북마크"}
+              {isSavingBookmark
+                ? "처리 중..."
+                : isBookmarked
+                  ? "★ 북마크됨"
+                  : "☆ 북마크"}
             </button>
           </div>
         </header>
