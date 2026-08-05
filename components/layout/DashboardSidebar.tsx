@@ -314,8 +314,8 @@ export default function DashboardSidebar() {
             )
           })}
 
-          {/* 내 과목 추가 */}
-          {!collapsed && (
+          {/* 내 과목 추가 — 담은 과목이 없을 때만 안내 */}
+          {!collapsed && courses.length === 0 && (
             <div
               onClick={() => router.push('/search')}
               style={{
