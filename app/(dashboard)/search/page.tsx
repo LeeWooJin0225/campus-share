@@ -37,7 +37,9 @@ const DEPT_ORDER = [
 
 const NO_DEPT_LABEL = "기타";
 
-
+/* ──────────────────────────────────────────────
+ * (A) 노트 개수 연결 지점
+ * ────────────────────────────────────────────── */
 const NOTE_COUNTS_ENABLED = true;
 
 async function fetchNoteCounts(
@@ -84,6 +86,11 @@ export default function SearchPage() {
 
   const [dept, setDept] = useState("전체");
   const [offerings, setOfferings] = useState<Offering[]>([]);
+  const [myCourseIds, setMyCourseIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [userId, setUserId] = useState("");
+  const [pendingId, setPendingId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -106,6 +113,9 @@ export default function SearchPage() {
           router.replace("/login");
           return;
         }
+
+        const uid = session.user.id;
+        setUserId(uid);
 
         const { data, error } = await supabase
           .from("course_offerings")
@@ -146,6 +156,24 @@ export default function SearchPage() {
             };
           }),
         );
+
+        /* 내가 담은 과목 */
+        const { data: myData, error: myError } = await supabase
+          .from("user_course_offerings")
+          .select("course_offering_id")
+          .eq("user_id", uid);
+
+        if (myError) {
+          console.error("내 과목 조회 실패:", myError);
+        } else {
+          const ids = (myData ?? []) as {
+            course_offering_id: string;
+          }[];
+
+          setMyCourseIds(
+            new Set(ids.map((r) => r.course_offering_id)),
+          );
+        }
       } catch (error) {
         console.error("전체 과목 조회 실패:", error);
 
@@ -163,6 +191,51 @@ export default function SearchPage() {
 
     void loadOfferings();
   }, [router]);
+
+  const toggleMyCourse = async (offeringId: string) => {
+    if (!userId || pendingId) return;
+
+    setPendingId(offeringId);
+
+    const isAdded = myCourseIds.has(offeringId);
+
+    if (isAdded) {
+      const { error } = await supabase
+        .from("user_course_offerings")
+        .delete()
+        .eq("user_id", userId)
+        .eq("course_offering_id", offeringId);
+
+      if (error) {
+        console.error("내 과목 빼기 실패:", error);
+      } else {
+        setMyCourseIds((prev) => {
+          const next = new Set(prev);
+          next.delete(offeringId);
+          return next;
+        });
+      }
+    } else {
+      const { error } = await supabase
+        .from("user_course_offerings")
+        .insert({
+          user_id: userId,
+          course_offering_id: offeringId,
+        });
+
+      if (error) {
+        console.error("내 과목 담기 실패:", error);
+      } else {
+        setMyCourseIds((prev) => {
+          const next = new Set(prev);
+          next.add(offeringId);
+          return next;
+        });
+      }
+    }
+
+    setPendingId("");
+  };
 
   /* DB 에 존재하는 학과만 뽑아 Figma 순서 우선으로 정렬 */
   const depts = useMemo(() => {
@@ -266,58 +339,67 @@ export default function SearchPage() {
 
                 {/* Subject rows */}
                 <div>
-                  {group.subjects.map(s => (
-                    <div
-                      key={s.id}
-                      onClick={() => router.push(`/courses/${s.id}`)}
-                      style={{
-                        display: 'flex', alignItems: 'center',
-                        padding: '12px 8px',
-                        borderBottom: '1px solid var(--cs-bg)',
-                        cursor: 'pointer', transition: 'background 0.1s',
-                        borderRadius: 'var(--cs-radius-md)',
-                        gap: 12,
-                      }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--cs-card-bg)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                    >
-                      {/* Subject dot */}
-                      <div style={{
-                        width: 8, height: 8, borderRadius: 'var(--cs-radius-full)', flexShrink: 0,
-                        background: s.empty ? 'var(--cs-border-str)' : 'var(--cs-purple)',
-                      }} />
+                  {group.subjects.map(s => {
+                    const isAdded = myCourseIds.has(s.id)
+                    const isPending = pendingId === s.id
 
-                      {/* Name */}
-                      <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--cs-ink)', flex: '0 0 160px' }}>
-                        {s.name}
-                      </span>
-
-                      {/* Professor */}
-                      <span style={{ fontSize: 13, color: 'var(--cs-ink-soft)', flex: 1 }}>
-                        이번 학기 {s.professor} 교수님
-                      </span>
-
-                      {/* Note count */}
-                      <span style={{ fontSize: 12.5, color: 'var(--cs-ink-faint)', flexShrink: 0, marginRight: 8 }}>
-                        {s.empty ? '노트 없음' : `노트 ${s.docCount}개`}
-                      </span>
-
-                      {/* 내 과목 추가 */}
-                      <button
-                        onClick={e => { e.stopPropagation() }}
+                    return (
+                      <div
+                        key={s.id}
+                        onClick={() => router.push(`/courses/${s.id}`)}
                         style={{
-                          fontSize: 11.5, padding: '3px 9px', borderRadius: 'var(--cs-radius-sm)',
-                          border: '1px solid var(--cs-border)', background: 'var(--cs-surface)',
-                          color: 'var(--cs-ink-soft)', cursor: 'pointer', fontFamily: 'inherit',
-                          flexShrink: 0, transition: 'all 0.1s',
+                          display: 'flex', alignItems: 'center',
+                          padding: '12px 8px',
+                          borderBottom: '1px solid var(--cs-bg)',
+                          cursor: 'pointer', transition: 'background 0.1s',
+                          borderRadius: 'var(--cs-radius-md)',
+                          gap: 12,
                         }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--cs-purple)'; e.currentTarget.style.color = 'var(--cs-purple-dark)' }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cs-border)'; e.currentTarget.style.color = 'var(--cs-ink-soft)' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--cs-card-bg)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       >
-                        ＋ 추가
-                      </button>
-                    </div>
-                  ))}
+                        {/* Subject dot */}
+                        <div style={{
+                          width: 8, height: 8, borderRadius: 'var(--cs-radius-full)', flexShrink: 0,
+                          background: s.empty ? 'var(--cs-border-str)' : 'var(--cs-purple)',
+                        }} />
+
+                        {/* Name */}
+                        <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--cs-ink)', flex: '0 0 160px' }}>
+                          {s.name}
+                        </span>
+
+                        {/* Professor */}
+                        <span style={{ fontSize: 13, color: 'var(--cs-ink-soft)', flex: 1 }}>
+                          이번 학기 {s.professor} 교수님
+                        </span>
+
+                        {/* Note count */}
+                        <span style={{ fontSize: 12.5, color: 'var(--cs-ink-faint)', flexShrink: 0, marginRight: 8 }}>
+                          {s.empty ? '노트 없음' : `노트 ${s.docCount}개`}
+                        </span>
+
+                        {/* 내 과목 추가 */}
+                        <button
+                          onClick={e => { e.stopPropagation(); void toggleMyCourse(s.id) }}
+                          disabled={isPending}
+                          style={{
+                            fontSize: 11.5, padding: '3px 9px', borderRadius: 'var(--cs-radius-sm)',
+                            border: `1px solid ${isAdded ? 'var(--cs-purple-border)' : 'var(--cs-border)'}`,
+                            background: isAdded ? 'var(--cs-purple-bg)' : 'var(--cs-surface)',
+                            color: isAdded ? 'var(--cs-purple-dark)' : 'var(--cs-ink-soft)',
+                            cursor: isPending ? 'default' : 'pointer', fontFamily: 'inherit',
+                            flexShrink: 0, transition: 'all 0.1s',
+                            opacity: isPending ? 0.6 : 1,
+                          }}
+                          onMouseEnter={e => { if (!isAdded) { e.currentTarget.style.borderColor = 'var(--cs-purple)'; e.currentTarget.style.color = 'var(--cs-purple-dark)' } }}
+                          onMouseLeave={e => { if (!isAdded) { e.currentTarget.style.borderColor = 'var(--cs-border)'; e.currentTarget.style.color = 'var(--cs-ink-soft)' } }}
+                        >
+                          {isAdded ? '✓ 담음' : '＋ 추가'}
+                        </button>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             ))}

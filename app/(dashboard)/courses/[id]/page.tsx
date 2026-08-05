@@ -117,6 +117,9 @@ export default function CoursePage() {
   const [subject, setSubject] =
     useState<SubjectInfo | null>(null);
   const [strata, setStrata] = useState<Stratum[]>([]);
+  const [userId, setUserId] = useState("");
+  const [isAdded, setIsAdded] = useState(false);
+  const [isPending, setIsPending] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -135,29 +138,18 @@ export default function CoursePage() {
           return;
         }
 
-        /* 내 수강 과목인지 확인 */
-        const {
-          data: enrollment,
-          error: enrollmentError,
-        } = await supabase
+        const uid = session.user.id;
+        setUserId(uid);
+
+        /* 내 과목으로 담았는지 확인 (차단용 아님, 버튼 표시용) */
+        const { data: enrollment } = await supabase
           .from("user_course_offerings")
           .select("course_offering_id")
-          .eq("user_id", session.user.id)
+          .eq("user_id", uid)
           .eq("course_offering_id", courseId)
           .maybeSingle();
 
-        if (enrollmentError) {
-          throw enrollmentError;
-        }
-
-        if (!enrollment) {
-          setErrorMessage(
-            "내 수강 과목에 등록되지 않은 수업입니다.",
-          );
-          setSubject(null);
-          setStrata([]);
-          return;
-        }
+        setIsAdded(Boolean(enrollment));
 
         /* 현재 개설 수업 → subject_id 확보 */
         const {
@@ -244,7 +236,7 @@ export default function CoursePage() {
               created_at,
               comment_count,
               course_offering_id,
-              profiles (
+              profiles:author_id (
                 nickname
               )
             `)
@@ -321,6 +313,41 @@ export default function CoursePage() {
     }
   }, [courseId, router]);
 
+  const toggleMyCourse = async () => {
+    if (!userId || isPending) return;
+
+    setIsPending(true);
+
+    if (isAdded) {
+      const { error } = await supabase
+        .from("user_course_offerings")
+        .delete()
+        .eq("user_id", userId)
+        .eq("course_offering_id", courseId);
+
+      if (error) {
+        console.error("내 과목 빼기 실패:", error);
+      } else {
+        setIsAdded(false);
+      }
+    } else {
+      const { error } = await supabase
+        .from("user_course_offerings")
+        .insert({
+          user_id: userId,
+          course_offering_id: courseId,
+        });
+
+      if (error) {
+        console.error("내 과목 담기 실패:", error);
+      } else {
+        setIsAdded(true);
+      }
+    }
+
+    setIsPending(false);
+  };
+
   const filteredStrata = useMemo(() => {
     return strata
       .map((sem) => ({
@@ -369,11 +396,31 @@ export default function CoursePage() {
           <span style={{ color: 'var(--cs-ink)' }}>{subject.name}</span>
         </div>
 
-        <h1 style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', margin: '0 0 7px', color: 'var(--cs-ink)' }}>
-          {subject.name}
-        </h1>
-        <div style={{ fontSize: 12, color: 'var(--cs-ink-faint)', marginBottom: 20 }}>
-          {subject.department} · {strata.length}개 학기 · 노트 {totalCount}개
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', margin: '0 0 7px', color: 'var(--cs-ink)' }}>
+              {subject.name}
+            </h1>
+            <div style={{ fontSize: 12, color: 'var(--cs-ink-faint)', marginBottom: 20 }}>
+              {subject.department} · {strata.length}개 학기 · 노트 {totalCount}개
+            </div>
+          </div>
+
+          <button
+            onClick={toggleMyCourse}
+            disabled={isPending}
+            style={{
+              flexShrink: 0, marginTop: 4,
+              fontSize: 12.5, padding: '6px 12px', borderRadius: 'var(--cs-radius-md)',
+              border: `1px solid ${isAdded ? 'var(--cs-purple-border)' : 'var(--cs-border-str)'}`,
+              background: isAdded ? 'var(--cs-purple-bg)' : 'var(--cs-surface)',
+              color: isAdded ? 'var(--cs-purple-dark)' : 'var(--cs-ink-soft)',
+              cursor: isPending ? 'default' : 'pointer', fontFamily: 'inherit',
+              transition: 'all 0.15s', opacity: isPending ? 0.6 : 1,
+            }}
+          >
+            {isAdded ? '✓ 내 과목' : '＋ 내 과목에 담기'}
+          </button>
         </div>
 
         {/* Tabs */}
