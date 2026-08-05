@@ -16,13 +16,20 @@ type ToolAction = 'bold' | 'list' | 'quote' | 'attach'
 type SubjectOption = {
   id: string;
   name: string;
+  professor: string;
+  /* 같은 과목+같은 교수인 다른 분반들의 id (표시용으로는 안 씀) */
+  siblingIds: string[];
 };
 
 type CourseRelation = {
   id: string;
   subjects:
-    | { name: string }
-    | { name: string }[]
+    | { id: string; name: string }
+    | { id: string; name: string }[]
+    | null;
+  professors:
+    | { id: string; name: string }
+    | { id: string; name: string }[]
     | null;
 };
 
@@ -94,6 +101,11 @@ export default function EditorPage() {
             course_offerings (
               id,
               subjects (
+                id,
+                name
+              ),
+              professors (
+                id,
                 name
               )
             )
@@ -106,28 +118,46 @@ export default function EditorPage() {
 
         const rows = (data ?? []) as unknown as MyCourseRow[];
 
+        /* 과목 + 교수 단위로 합치기 (같은 교수 다른 시간표는 하나로) */
+        const optionMap = new Map<string, SubjectOption>();
+
+        rows.forEach((row) => {
+          const course = pickOne(row.course_offerings);
+
+          if (!course) {
+            return;
+          }
+
+          const subject = pickOne(course.subjects);
+          const professor = pickOne(course.professors);
+
+          const key = `${subject?.id ?? "unknown"}__${professor?.id ?? "unknown"}`;
+
+          const existing = optionMap.get(key);
+
+          if (existing) {
+            existing.siblingIds.push(course.id);
+
+            /* URL로 넘어온 분반이 이 묶음에 있으면 대표 id를 그걸로 */
+            if (course.id === initialSubjectId) {
+              existing.id = course.id;
+            }
+
+            return;
+          }
+
+          optionMap.set(key, {
+            id: course.id,
+            name: subject?.name ?? "과목명 없음",
+            professor: professor?.name ?? "교수 미정",
+            siblingIds: [course.id],
+          });
+        });
+
         setSubjects(
-          rows
-            .map((row): SubjectOption | null => {
-              const course = pickOne(row.course_offerings);
-
-              if (!course) {
-                return null;
-              }
-
-              const subject = pickOne(course.subjects);
-
-              return {
-                id: course.id,
-                name: subject?.name ?? "과목명 없음",
-              };
-            })
-            .filter(
-              (s): s is SubjectOption => s !== null,
-            )
-            .sort((a, b) =>
-              a.name.localeCompare(b.name, "ko"),
-            ),
+          Array.from(optionMap.values()).sort((a, b) =>
+            a.name.localeCompare(b.name, "ko"),
+          ),
         );
       } catch (error) {
         console.error("에디터 과목 조회 실패:", error);
@@ -135,9 +165,11 @@ export default function EditorPage() {
     };
 
     void loadMyCourses();
-  }, [router]);
+  }, [router, initialSubjectId]);
 
-  const selectedSubject = subjects.find(s => s.id === selectedSubjectId)
+  const selectedSubject = subjects.find(
+    s => s.id === selectedSubjectId || s.siblingIds.includes(selectedSubjectId),
+  )
 
   const insertAtCursor = useCallback((prefix: string, suffix = '') => {
     const ta = bodyRef.current
@@ -289,7 +321,9 @@ export default function EditorPage() {
               {selectedSubject && (
                 <span style={{ width: 7, height: 7, borderRadius: 'var(--cs-radius-full)', background: 'var(--cs-purple)', flexShrink: 0 }} />
               )}
-              {selectedSubject ? selectedSubject.name : '과목 선택'}
+              {selectedSubject
+                ? `${selectedSubject.name} · ${selectedSubject.professor} 교수님`
+                : '과목 선택'}
               <span style={{ fontSize: 10, opacity: 0.45 }}>▾</span>
             </button>
 
@@ -300,27 +334,40 @@ export default function EditorPage() {
                   background: 'var(--cs-surface)', border: '1px solid var(--cs-border)',
                   borderRadius: 'var(--cs-radius-dropdown)', padding: '6px',
                   boxShadow: 'var(--cs-shadow-dropdown)',
-                  minWidth: 200,
+                  minWidth: 240,
                 }}
               >
-                {subjects.map(s => (
-                  <div
-                    key={s.id}
-                    onClick={() => { setSelectedSubjectId(s.id); setSubjectError(false); setShowSubjectDropdown(false) }}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '8px 10px', borderRadius: 'var(--cs-radius-md)', cursor: 'pointer',
-                      fontSize: 13.5, color: 'var(--cs-ink)',
-                      background: s.id === selectedSubjectId ? 'var(--cs-purple-bg)' : 'transparent',
-                      transition: 'background 0.1s',
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.background = s.id === selectedSubjectId ? 'var(--cs-purple-bg)' : 'var(--cs-bg)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = s.id === selectedSubjectId ? 'var(--cs-purple-bg)' : 'transparent')}
-                  >
-                    <span style={{ width: 7, height: 7, borderRadius: 'var(--cs-radius-full)', background: s.id === selectedSubjectId ? 'var(--cs-purple)' : 'var(--cs-border-str)', flexShrink: 0 }} />
-                    {s.name}
+                {subjects.length === 0 && (
+                  <div style={{ padding: '8px 10px', fontSize: 12.5, color: 'var(--cs-ink-faint)' }}>
+                    담은 과목이 없어요
                   </div>
-                ))}
+                )}
+
+                {subjects.map(s => {
+                  const isSelected =
+                    s.id === selectedSubjectId ||
+                    s.siblingIds.includes(selectedSubjectId)
+
+                  return (
+                    <div
+                      key={s.id}
+                      onClick={() => { setSelectedSubjectId(s.id); setSubjectError(false); setShowSubjectDropdown(false) }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '8px 10px', borderRadius: 'var(--cs-radius-md)', cursor: 'pointer',
+                        fontSize: 13.5, color: 'var(--cs-ink)',
+                        background: isSelected ? 'var(--cs-purple-bg)' : 'transparent',
+                        transition: 'background 0.1s',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = isSelected ? 'var(--cs-purple-bg)' : 'var(--cs-bg)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = isSelected ? 'var(--cs-purple-bg)' : 'transparent')}
+                    >
+                      <span style={{ width: 7, height: 7, borderRadius: 'var(--cs-radius-full)', background: isSelected ? 'var(--cs-purple)' : 'var(--cs-border-str)', flexShrink: 0 }} />
+                      <span style={{ flex: 1 }}>{s.name}</span>
+                      <span style={{ fontSize: 12, color: 'var(--cs-ink-faint)' }}>{s.professor} 교수님</span>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>

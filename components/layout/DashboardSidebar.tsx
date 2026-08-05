@@ -16,6 +16,10 @@ type CourseRelation = {
     | { name: string }
     | { name: string }[]
     | null;
+  professors:
+    | { id: string; name: string }
+    | { id: string; name: string }[]
+    | null;
 };
 
 type UserCourseRow = {
@@ -91,6 +95,10 @@ export default function DashboardSidebar() {
               id,
               subjects (
                 name
+              ),
+              professors (
+                id,
+                name
               )
             )
           `)
@@ -102,29 +110,35 @@ export default function DashboardSidebar() {
 
         const rows = (data ?? []) as unknown as UserCourseRow[];
 
+        /* 과목 + 교수 기준으로 합치기 */
+        const courseMap = new Map<string, SidebarCourse>();
+
+        rows.forEach((row) => {
+          const course = pickOne(row.course_offerings);
+
+          if (!course) {
+            return;
+          }
+
+          const subject = pickOne(course.subjects);
+          const professor = pickOne(course.professors);
+
+          const key = `${subject?.name ?? "unknown"}__${professor?.id ?? "unknown"}`;
+
+          if (courseMap.has(key)) {
+            return;
+          }
+
+          courseMap.set(key, {
+            id: course.id,
+            name: subject?.name ?? "과목명 없음",
+          });
+        });
+
         setCourses(
-          rows
-            .map((row): SidebarCourse | null => {
-              const course = pickOne(row.course_offerings);
-
-              if (!course) {
-                return null;
-              }
-
-              const subject = pickOne(course.subjects);
-
-              return {
-                id: course.id,
-                name: subject?.name ?? "과목명 없음",
-              };
-            })
-            .filter(
-              (course): course is SidebarCourse =>
-                course !== null,
-            )
-            .sort((a, b) =>
-              a.name.localeCompare(b.name, "ko"),
-            ),
+          Array.from(courseMap.values()).sort((a, b) =>
+            a.name.localeCompare(b.name, "ko"),
+          ),
         );
 
         /* 북마크 개수 */

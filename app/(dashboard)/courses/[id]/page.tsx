@@ -23,8 +23,9 @@ type DocRow = {
   comments: number;
 };
 
-type Stratum = {
-  offeringId: string;
+type Group = {
+  groupKey: string;
+  offeringIds: string[];
   semester: string;
   professor: string;
   isCurrent: boolean;
@@ -41,8 +42,8 @@ type OfferingRow = {
     | { id: string; name: string; department: string | null }[]
     | null;
   professors:
-    | { name: string }
-    | { name: string }[]
+    | { id: string; name: string }
+    | { id: string; name: string }[]
     | null;
   semesters:
     | { year: number; term: number }
@@ -116,12 +117,19 @@ export default function CoursePage() {
 
   const [subject, setSubject] =
     useState<SubjectInfo | null>(null);
-  const [strata, setStrata] = useState<Stratum[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
   const [userId, setUserId] = useState("");
-  const [isAdded, setIsAdded] = useState(false);
+  const [addedIds, setAddedIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [isPending, setIsPending] = useState(false);
+  const [showAddPicker, setShowAddPicker] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+
+  const [sectionChoice, setSectionChoice] = useState <
+    Record<number, string>
+  >({});
 
   useEffect(() => {
     const loadCoursePage = async () => {
@@ -141,17 +149,20 @@ export default function CoursePage() {
         const uid = session.user.id;
         setUserId(uid);
 
-        /* 내 과목으로 담았는지 확인 (차단용 아님, 버튼 표시용) */
-        const { data: enrollment } = await supabase
+        /* 내가 담은 분반 전체 */
+        const { data: enrollments } = await supabase
           .from("user_course_offerings")
           .select("course_offering_id")
-          .eq("user_id", uid)
-          .eq("course_offering_id", courseId)
-          .maybeSingle();
+          .eq("user_id", uid);
 
-        setIsAdded(Boolean(enrollment));
+        setAddedIds(
+          new Set(
+            ((enrollments ?? []) as {
+              course_offering_id: string;
+            }[]).map((r) => r.course_offering_id),
+          ),
+        );
 
-        /* 현재 개설 수업 → subject_id 확보 */
         const {
           data: currentData,
           error: currentError,
@@ -166,6 +177,7 @@ export default function CoursePage() {
               department
             ),
             professors (
+              id,
               name
             ),
             semesters (
@@ -192,7 +204,6 @@ export default function CoursePage() {
             currentSubject?.department ?? "학과 미지정",
         });
 
-        /* 같은 과목의 모든 개설 학기 */
         const {
           data: offeringData,
           error: offeringError,
@@ -207,6 +218,7 @@ export default function CoursePage() {
               department
             ),
             professors (
+              id,
               name
             ),
             semesters (
@@ -225,7 +237,6 @@ export default function CoursePage() {
 
         const offeringIds = offeringRows.map((row) => row.id);
 
-        /* 해당 개설 수업들의 노트 */
         const { data: postData, error: postError } =
           await supabase
             .from("posts")
@@ -272,29 +283,63 @@ export default function CoursePage() {
           docsByOffering[row.course_offering_id].push(doc);
         });
 
-        const nextStrata = offeringRows
-          .map((row): Stratum => {
-            const professor = pickOne(row.professors);
-            const semester = pickOne(row.semesters);
-            const docs = docsByOffering[row.id] ?? [];
+        const groupMap = new Map<string, Group>();
 
-            return {
-              offeringId: row.id,
-              semester: semester
-                ? `${semester.year}-${semester.term}학기`
-                : "학기 미지정",
-              professor: professor?.name ?? "교수 미정",
-              isCurrent: row.id === courseId,
-              count: docs.length,
-              sortKey: semester
-                ? semester.year * 10 + semester.term
-                : 0,
-              docs,
-            };
-          })
-          .sort((a, b) => b.sortKey - a.sortKey);
+        offeringRows.forEach((row) => {
+          const professor = pickOne(row.professors);
+          const semester = pickOne(row.semesters);
 
-        setStrata(nextStrata);
+          const semesterKey = semester
+            ? `${semester.year}-${semester.term}`
+            : "unknown";
+          const professorKey = professor?.id ?? "unknown";
+          const groupKey = `${semesterKey}__${professorKey}`;
+
+          const docs = docsByOffering[row.id] ?? [];
+
+          const existing = groupMap.get(groupKey);
+
+          if (existing) {
+            existing.offeringIds.push(row.id);
+            existing.docs.push(...docs);
+            existing.count += docs.length;
+            if (row.id === courseId) {
+              existing.isCurrent = true;
+            }
+            return;
+          }
+
+          groupMap.set(groupKey, {
+            groupKey,
+            offeringIds: [row.id],
+            semester: semester
+              ? `${semester.year}-${semester.term}학기`
+              : "학기 미지정",
+            professor: professor?.name ?? "교수 미정",
+            isCurrent: row.id === courseId,
+            count: docs.length,
+            sortKey: semester
+              ? semester.year * 10 + semester.term
+              : 0,
+            docs: [...docs],
+          });
+        });
+
+        const nextGroups = Array.from(groupMap.values()).sort(
+          (a, b) => b.sortKey - a.sortKey,
+        );
+
+        setGroups(nextGroups);
+
+        const initialChoice: Record<number, string> = {};
+
+        nextGroups.forEach((g) => {
+          if (!(g.sortKey in initialChoice) || g.isCurrent) {
+            initialChoice[g.sortKey] = g.groupKey;
+          }
+        });
+
+        setSectionChoice(initialChoice);
       } catch (error) {
         console.error("과목 상세 화면 조회 실패:", error);
 
@@ -313,51 +358,127 @@ export default function CoursePage() {
     }
   }, [courseId, router]);
 
-  const toggleMyCourse = async () => {
+  const semesterEntries = useMemo(() => {
+    const bySemester = new Map<number, Group[]>();
+
+    groups.forEach((g) => {
+      const list = bySemester.get(g.sortKey) ?? [];
+      list.push(g);
+      bySemester.set(g.sortKey, list);
+    });
+
+    return Array.from(bySemester.entries())
+      .map(([sortKey, list]) => {
+        const chosenKey = sectionChoice[sortKey];
+        const chosen =
+          list.find((g) => g.groupKey === chosenKey) ??
+          list[0];
+
+        return {
+          sortKey,
+          hasMultiple: list.length > 1,
+          options: list,
+          chosen,
+        };
+      })
+      .sort((a, b) => b.sortKey - a.sortKey);
+  }, [groups, sectionChoice]);
+
+  /* 이번 학기(가장 최근) 그룹들 — 담기 대상 */
+  const currentSemesterGroups = useMemo(() => {
+    if (groups.length === 0) return [];
+
+    const maxSortKey = Math.max(...groups.map((g) => g.sortKey));
+
+    return groups.filter((g) => g.sortKey === maxSortKey);
+  }, [groups]);
+
+  /* 담은 그룹 찾기 */
+  const addedGroup = currentSemesterGroups.find((g) =>
+    g.offeringIds.some((id) => addedIds.has(id)),
+  );
+
+  const addCourse = async (group: Group) => {
     if (!userId || isPending) return;
 
     setIsPending(true);
+    setShowAddPicker(false);
 
-    if (isAdded) {
-      const { error } = await supabase
-        .from("user_course_offerings")
-        .delete()
-        .eq("user_id", userId)
-        .eq("course_offering_id", courseId);
+    const { error } = await supabase
+      .from("user_course_offerings")
+      .insert({
+        user_id: userId,
+        course_offering_id: group.offeringIds[0],
+      });
 
-      if (error) {
-        console.error("내 과목 빼기 실패:", error);
-      } else {
-        setIsAdded(false);
-      }
+    if (error) {
+      console.error("내 과목 담기 실패:", error);
     } else {
-      const { error } = await supabase
-        .from("user_course_offerings")
-        .insert({
-          user_id: userId,
-          course_offering_id: courseId,
-        });
-
-      if (error) {
-        console.error("내 과목 담기 실패:", error);
-      } else {
-        setIsAdded(true);
-      }
+      setAddedIds((prev) => {
+        const next = new Set(prev);
+        next.add(group.offeringIds[0]);
+        return next;
+      });
     }
 
     setIsPending(false);
   };
 
-  const filteredStrata = useMemo(() => {
-    return strata
-      .map((sem) => ({
-        ...sem,
-        docs: sem.docs.filter(
-          (d) => activeTab === "all" || d.tag === activeTab,
-        ),
+  const removeCourse = async (group: Group) => {
+    if (!userId || isPending) return;
+
+    setIsPending(true);
+
+    const { error } = await supabase
+      .from("user_course_offerings")
+      .delete()
+      .eq("user_id", userId)
+      .in("course_offering_id", group.offeringIds);
+
+    if (error) {
+      console.error("내 과목 빼기 실패:", error);
+    } else {
+      setAddedIds((prev) => {
+        const next = new Set(prev);
+        group.offeringIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    }
+
+    setIsPending(false);
+  };
+
+  const handleAddButton = () => {
+    if (addedGroup) {
+      void removeCourse(addedGroup);
+      return;
+    }
+
+    if (currentSemesterGroups.length === 1) {
+      void addCourse(currentSemesterGroups[0]);
+      return;
+    }
+
+    setShowAddPicker((prev) => !prev);
+  };
+
+  const filteredEntries = useMemo(() => {
+    return semesterEntries
+      .map((entry) => ({
+        ...entry,
+        chosen: {
+          ...entry.chosen,
+          docs: entry.chosen.docs.filter(
+            (d) =>
+              activeTab === "all" || d.tag === activeTab,
+          ),
+        },
       }))
-      .filter((sem) => sem.docs.length > 0);
-  }, [activeTab, strata]);
+      .filter((entry) => entry.chosen.docs.length > 0);
+  }, [activeTab, semesterEntries]);
+
+  const displayEntries =
+    filteredEntries.length > 0 ? filteredEntries : semesterEntries;
 
   if (isLoading) {
     return (
@@ -379,10 +500,13 @@ export default function CoursePage() {
     );
   }
 
-  const totalCount = strata.reduce((s, e) => s + e.count, 0);
+  const totalCount = groups.reduce((s, e) => s + e.count, 0);
 
   return (
-    <div style={{ height: '100%', overflowY: 'auto', background: 'var(--cs-surface)' }}>
+    <div
+      style={{ height: '100%', overflowY: 'auto', background: 'var(--cs-surface)' }}
+      onClick={() => setShowAddPicker(false)}
+    >
       <div style={{ padding: '18px 26px 40px' }}>
 
         {/* Breadcrumb */}
@@ -402,25 +526,63 @@ export default function CoursePage() {
               {subject.name}
             </h1>
             <div style={{ fontSize: 12, color: 'var(--cs-ink-faint)', marginBottom: 20 }}>
-              {subject.department} · {strata.length}개 학기 · 노트 {totalCount}개
+              {subject.department} · {groups.length}개 학기 · 노트 {totalCount}개
             </div>
           </div>
 
-          <button
-            onClick={toggleMyCourse}
-            disabled={isPending}
-            style={{
-              flexShrink: 0, marginTop: 4,
-              fontSize: 12.5, padding: '6px 12px', borderRadius: 'var(--cs-radius-md)',
-              border: `1px solid ${isAdded ? 'var(--cs-purple-border)' : 'var(--cs-border-str)'}`,
-              background: isAdded ? 'var(--cs-purple-bg)' : 'var(--cs-surface)',
-              color: isAdded ? 'var(--cs-purple-dark)' : 'var(--cs-ink-soft)',
-              cursor: isPending ? 'default' : 'pointer', fontFamily: 'inherit',
-              transition: 'all 0.15s', opacity: isPending ? 0.6 : 1,
-            }}
-          >
-            {isAdded ? '✓ 내 과목' : '＋ 내 과목에 담기'}
-          </button>
+          {/* 담기 버튼 + 교수 선택 팝오버 */}
+          <div style={{ position: 'relative', flexShrink: 0, marginTop: 4 }} onClick={e => e.stopPropagation()}>
+            <button
+              onClick={handleAddButton}
+              disabled={isPending}
+              style={{
+                fontSize: 12.5, padding: '6px 12px', borderRadius: 'var(--cs-radius-md)',
+                border: `1px solid ${addedGroup ? 'var(--cs-purple-border)' : 'var(--cs-border-str)'}`,
+                background: addedGroup ? 'var(--cs-purple-bg)' : 'var(--cs-surface)',
+                color: addedGroup ? 'var(--cs-purple-dark)' : 'var(--cs-ink-soft)',
+                cursor: isPending ? 'default' : 'pointer', fontFamily: 'inherit',
+                transition: 'all 0.15s', opacity: isPending ? 0.6 : 1,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {addedGroup
+                ? `✓ 내 과목 · ${addedGroup.professor} 교수님`
+                : currentSemesterGroups.length > 1
+                  ? '＋ 내 과목에 담기 ▾'
+                  : '＋ 내 과목에 담기'}
+            </button>
+
+            {showAddPicker && !addedGroup && (
+              <div
+                style={{
+                  position: 'absolute', top: '110%', right: 0, zIndex: 50,
+                  background: 'var(--cs-surface)', border: '1px solid var(--cs-border)',
+                  borderRadius: 'var(--cs-radius-dropdown)', padding: '6px',
+                  boxShadow: 'var(--cs-shadow-dropdown)',
+                  minWidth: 180,
+                }}
+              >
+                <div style={{ fontSize: 11, color: 'var(--cs-ink-faint)', padding: '4px 10px 6px' }}>
+                  듣는 반을 골라주세요
+                </div>
+                {currentSemesterGroups.map(g => (
+                  <div
+                    key={g.groupKey}
+                    onClick={() => void addCourse(g)}
+                    style={{
+                      padding: '8px 10px', borderRadius: 'var(--cs-radius-md)',
+                      cursor: 'pointer', fontSize: 13, color: 'var(--cs-ink)',
+                      transition: 'background 0.1s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--cs-bg)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    {g.professor} 교수님
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Tabs */}
@@ -447,79 +609,118 @@ export default function CoursePage() {
           })}
         </div>
 
-        {/* Semester strata */}
-        {strata.length > 0 ? (
+        {/* Semester groups */}
+        {groups.length > 0 ? (
           <div style={{ borderLeft: '1px solid var(--cs-border-str)', paddingLeft: 20, marginLeft: 5, marginTop: 16 }}>
-            {(filteredStrata.length > 0 ? filteredStrata : strata).map(sem => (
-              <div key={sem.offeringId}>
-                {/* Semester header */}
-                <div
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    margin: '24px 0 4px', position: 'relative',
-                  }}
-                >
-                  {/* Timeline marker */}
+            {displayEntries.map(entry => {
+              const g = entry.chosen;
+              const canWrite = g.offeringIds.some(id => addedIds.has(id));
+
+              return (
+                <div key={entry.sortKey}>
                   <div
                     style={{
-                      position: 'absolute', left: -25, width: 9, height: 9, borderRadius: 'var(--cs-radius-full)',
-                      background: sem.isCurrent ? 'var(--cs-purple)' : 'var(--cs-surface)',
-                      border: sem.isCurrent ? '1px solid var(--cs-purple)' : '1px solid var(--cs-border-str)',
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      margin: '24px 0 4px', position: 'relative',
                     }}
-                  />
-                  <h4 style={{ fontSize: 13, fontWeight: 600, margin: 0, color: 'var(--cs-ink)' }}>
-                    {sem.semester}
-                  </h4>
-                  <span style={{ fontSize: 12, color: 'var(--cs-ink-soft)' }}>· {sem.professor} 교수님</span>
-                  {sem.isCurrent && (
-                    <span style={{
-                      fontSize: 11, color: 'var(--cs-purple-dark)', background: 'var(--cs-purple-bg)',
-                      padding: '2px 7px', borderRadius: 'var(--cs-radius-xs)',
-                    }}>
-                      이번 학기
-                    </span>
-                  )}
-                  <span style={{ fontSize: 11.5, color: 'var(--cs-ink-faint)' }}>{sem.count}개</span>
-                  {/* Sort per semester */}
-                  <button style={{
-                    marginLeft: 'auto',
-                    fontSize: 11.5, color: 'var(--cs-ink-soft)', background: 'var(--cs-surface)',
-                    border: '1px solid var(--cs-border)', padding: '3px 8px', borderRadius: 'var(--cs-radius-sm)',
-                    cursor: 'pointer', fontFamily: 'inherit',
-                  }}>
-                    최신순 ▾
-                  </button>
-                </div>
-
-                {/* Doc rows */}
-                <div style={{ borderTop: '1px solid var(--cs-border)' }}>
-                  {sem.docs.map((doc) => (
+                  >
                     <div
-                      key={doc.docId}
-                      onClick={() => router.push(`/posts/${doc.docId}`)}
                       style={{
-                        display: 'flex', alignItems: 'center', gap: 11,
-                        padding: '11px 4px',
-                        borderBottom: '1px solid var(--cs-border)',
-                        cursor: 'pointer', transition: 'background 0.1s',
+                        position: 'absolute', left: -25, width: 9, height: 9, borderRadius: 'var(--cs-radius-full)',
+                        background: g.isCurrent ? 'var(--cs-purple)' : 'var(--cs-surface)',
+                        border: g.isCurrent ? '1px solid var(--cs-purple)' : '1px solid var(--cs-border-str)',
                       }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--cs-hover-row)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                    >
-                      <TagChip tag={doc.tag} />
-                      <span style={{ fontSize: 13.5, color: 'var(--cs-ink)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {doc.title}
+                    />
+                    <h4 style={{ fontSize: 13, fontWeight: 600, margin: 0, color: 'var(--cs-ink)' }}>
+                      {g.semester}
+                    </h4>
+
+                    {entry.hasMultiple ? (
+                      <select
+                        value={g.groupKey}
+                        onChange={e => setSectionChoice(prev => ({ ...prev, [entry.sortKey]: e.target.value }))}
+                        style={{
+                          fontSize: 12, color: 'var(--cs-ink-soft)',
+                          border: '1px solid var(--cs-border)', borderRadius: 'var(--cs-radius-sm)',
+                          padding: '2px 6px', background: 'var(--cs-surface)',
+                          fontFamily: 'inherit', cursor: 'pointer',
+                        }}
+                      >
+                        {entry.options.map(opt => (
+                          <option key={opt.groupKey} value={opt.groupKey}>
+                            {opt.professor} 교수님
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span style={{ fontSize: 12, color: 'var(--cs-ink-soft)' }}>· {g.professor} 교수님</span>
+                    )}
+
+                    {g.isCurrent && (
+                      <span style={{
+                        fontSize: 11, color: 'var(--cs-purple-dark)', background: 'var(--cs-purple-bg)',
+                        padding: '2px 7px', borderRadius: 'var(--cs-radius-xs)',
+                      }}>
+                        이번 학기
                       </span>
-                      <span style={{ fontSize: 12, color: 'var(--cs-ink-faint)', flexShrink: 0 }}>
-                        {doc.author}
-                        <span style={{ marginLeft: 12 }}>{doc.time}</span>
-                        <span style={{ marginLeft: 12 }}>댓글 {doc.comments}</span>
-                      </span>
+                    )}
+                    <span style={{ fontSize: 11.5, color: 'var(--cs-ink-faint)' }}>{g.count}개</span>
+
+                    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {canWrite && (
+                        <button
+                          onClick={() => router.push(`/notes/new?course=${g.offeringIds[0]}`)}
+                          style={{
+                            fontSize: 11.5, color: 'var(--cs-purple-dark)', background: 'var(--cs-surface)',
+                            border: '1px solid var(--cs-border)', padding: '3px 8px', borderRadius: 'var(--cs-radius-sm)',
+                            cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.1s',
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--cs-purple)'; e.currentTarget.style.background = 'var(--cs-purple-bg)' }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cs-border)'; e.currentTarget.style.background = 'var(--cs-surface)' }}
+                        >
+                          ＋ 노트
+                        </button>
+                      )}
+
+                      <button style={{
+                        fontSize: 11.5, color: 'var(--cs-ink-soft)', background: 'var(--cs-surface)',
+                        border: '1px solid var(--cs-border)', padding: '3px 8px', borderRadius: 'var(--cs-radius-sm)',
+                        cursor: 'pointer', fontFamily: 'inherit',
+                      }}>
+                        최신순 ▾
+                      </button>
                     </div>
-                  ))}
+                  </div>
+
+                  <div style={{ borderTop: '1px solid var(--cs-border)' }}>
+                    {g.docs.map((doc) => (
+                      <div
+                        key={doc.docId}
+                        onClick={() => router.push(`/posts/${doc.docId}`)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 11,
+                          padding: '11px 4px',
+                          borderBottom: '1px solid var(--cs-border)',
+                          cursor: 'pointer', transition: 'background 0.1s',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--cs-hover-row)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <TagChip tag={doc.tag} />
+                        <span style={{ fontSize: 13.5, color: 'var(--cs-ink)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {doc.title}
+                        </span>
+                        <span style={{ fontSize: 12, color: 'var(--cs-ink-faint)', flexShrink: 0 }}>
+                          {doc.author}
+                          <span style={{ marginLeft: 12 }}>{doc.time}</span>
+                          <span style={{ marginLeft: 12 }}>댓글 {doc.comments}</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--cs-ink-faint)', fontSize: 13.5 }}>
