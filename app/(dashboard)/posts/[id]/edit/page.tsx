@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ChangeEvent,
   useEffect,
   useRef,
   useState,
@@ -14,63 +13,50 @@ import {
 import RichTextEditor from "@/components/editor/RichTextEditor";
 import { supabase } from "@/lib/supabase";
 
-import styles from "@/app/(dashboard)/notes/new/new-note.module.css";
-
-type PostType =
+type TagType =
   | "notes"
   | "exam"
   | "reference"
   | "study_trail";
 
-type CourseOption = {
+type SubjectOption = {
   id: string;
-  label: string;
+  name: string;
 };
 
 type CourseRelation = {
   id: string;
-  section: string | null;
   subjects:
-    | {
-        name: string;
-        subject_code: string | null;
-      }
-    | {
-        name: string;
-        subject_code: string | null;
-      }[]
-    | null;
-  professors:
     | { name: string }
     | { name: string }[]
     | null;
-  semesters:
-    | {
-        year: number;
-        term: number;
-      }
-    | {
-        year: number;
-        term: number;
-      }[]
-    | null;
 };
 
-type UserCourseRow = {
-  course_offering_id: string;
+type MyCourseRow = {
   course_offerings:
     | CourseRelation
     | CourseRelation[]
     | null;
 };
 
+type AttachmentInsertRow = {
+  post_id: string;
+  uploader_id: string;
+  original_name: string;
+  storage_path: string;
+  mime_type: string;
+  size_bytes: number;
+  display_order: number;
+};
+
 type EditablePostRow = {
   id: string;
   author_id: string;
   course_offering_id: string;
-  post_type: PostType;
+  post_type: TagType;
   title: string;
   content: string | null;
+  price: number;
 };
 
 type ExistingAttachment = {
@@ -85,52 +71,143 @@ type ExistingAttachment = {
 const MAX_FILE_COUNT = 5;
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 
-const ACCEPTED_EXTENSIONS = new Set([
-  "pdf",
-  "png",
-  "jpg",
-  "jpeg",
-  "doc",
-  "docx",
-  "ppt",
-  "pptx",
-]);
+const ACCEPTED_FILE_TYPES = [
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+] as const;
+
+const TAG_OPTIONS: {
+  key: TagType;
+  label: string;
+}[] = [
+  {
+    key: "notes",
+    label: "Notes",
+  },
+  {
+    key: "exam",
+    label: "Exam",
+  },
+  {
+    key: "reference",
+    label: "Reference",
+  },
+  {
+    key: "study_trail",
+    label: "Study Trail",
+  },
+];
+
+function pickOne<T>(
+  value: T | T[] | null,
+): T | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return value;
+}
+
+function getPlainTextFromHtml(
+  html: string,
+) {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  const element =
+    document.createElement("div");
+
+  element.innerHTML = html;
+
+  return element.textContent ?? "";
+}
 
 export default function EditPostPage() {
-  const params = useParams<{ id: string }>();
   const router = useRouter();
+  const params = useParams<{ id: string }>();
   const postId = params.id;
+
+  const titleRef =
+    useRef<HTMLTextAreaElement>(null);
+
   const fileInputRef =
     useRef<HTMLInputElement>(null);
 
-  const [postType, setPostType] =
-    useState<PostType>("notes");
-  const [courseOfferingId, setCourseOfferingId] =
+  const [subjects, setSubjects] =
+    useState<SubjectOption[]>([]);
+
+  const [userId, setUserId] =
     useState("");
-  const [courseOptions, setCourseOptions] =
-    useState<CourseOption[]>([]);
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
+
+  const [
+    selectedSubjectId,
+    setSelectedSubjectId,
+  ] = useState("");
+
+  const [
+    selectedTag,
+    setSelectedTag,
+  ] = useState<TagType | null>(null);
+
+  const [title, setTitle] =
+    useState("");
+
+  const [body, setBody] =
+    useState("");
+
   const [
     existingAttachments,
     setExistingAttachments,
   ] = useState<ExistingAttachment[]>([]);
+
   const [
     removedAttachments,
     setRemovedAttachments,
   ] = useState<ExistingAttachment[]>([]);
-  const [newFiles, setNewFiles] =
+
+  const [files, setFiles] =
     useState<File[]>([]);
 
-  const [isLoading, setIsLoading] =
-    useState(true);
-  const [isSubmitting, setIsSubmitting] =
-    useState(false);
-  const [errorMessage, setErrorMessage] =
-    useState("");
+
   const [
     fileErrorMessage,
     setFileErrorMessage,
+  ] = useState("");
+
+  const [
+    showSubjectDropdown,
+    setShowSubjectDropdown,
+  ] = useState(false);
+
+  const [
+    isSaving,
+    setIsSaving,
+  ] = useState(false);
+
+  const [
+    isLoading,
+    setIsLoading,
+  ] = useState(true);
+
+  const [
+    tagError,
+    setTagError,
+  ] = useState(false);
+
+  const [
+    subjectError,
+    setSubjectError,
+  ] = useState(false);
+
+  const [
+    errorMessage,
+    setErrorMessage,
   ] = useState("");
 
   useEffect(() => {
@@ -140,18 +217,16 @@ export default function EditPostPage() {
         setErrorMessage("");
 
         const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
+          data: { session },
+        } =
+          await supabase.auth.getSession();
 
-        if (userError) {
-          throw userError;
-        }
-
-        if (!user) {
+        if (!session?.user) {
           router.replace("/login");
           return;
         }
+
+        setUserId(session.user.id);
 
         const [
           postResult,
@@ -166,32 +241,28 @@ export default function EditPostPage() {
               course_offering_id,
               post_type,
               title,
-              content
+              content,
+              price
             `)
             .eq("id", postId)
             .single(),
 
           supabase
-            .from("user_course_offerings")
+            .from(
+              "user_course_offerings",
+            )
             .select(`
-              course_offering_id,
               course_offerings (
                 id,
-                section,
                 subjects (
-                  name,
-                  subject_code
-                ),
-                professors (
                   name
-                ),
-                semesters (
-                  year,
-                  term
                 )
               )
             `)
-            .eq("user_id", user.id),
+            .eq(
+              "user_id",
+              session.user.id,
+            ),
 
           supabase
             .from("post_attachments")
@@ -224,88 +295,68 @@ export default function EditPostPage() {
         const post =
           postResult.data as EditablePostRow;
 
-        if (post.author_id !== user.id) {
-          alert("본인이 작성한 글만 수정할 수 있습니다.");
-          router.replace(`/posts/${postId}`);
+        if (
+          post.author_id !==
+          session.user.id
+        ) {
+          alert(
+            "본인이 작성한 글만 수정할 수 있어요.",
+          );
+          router.replace(
+            `/posts/${postId}`,
+          );
           return;
         }
 
         const rows =
           (courseResult.data ??
-            []) as unknown as UserCourseRow[];
+            []) as unknown as MyCourseRow[];
 
-        const options = rows
-          .map((item): CourseOption | null => {
-            const rawCourse =
-              item.course_offerings;
+        const nextSubjects = rows
+          .map(
+            (
+              row,
+            ): SubjectOption | null => {
+              const course = pickOne(
+                row.course_offerings,
+              );
 
-            const course = Array.isArray(
-              rawCourse,
-            )
-              ? rawCourse[0]
-              : rawCourse;
+              if (!course) {
+                return null;
+              }
 
-            if (!course) {
-              return null;
-            }
+              const subject = pickOne(
+                course.subjects,
+              );
 
-            const subject = Array.isArray(
-              course.subjects,
-            )
-              ? course.subjects[0]
-              : course.subjects;
-
-            const professor = Array.isArray(
-              course.professors,
-            )
-              ? course.professors[0]
-              : course.professors;
-
-            const semester = Array.isArray(
-              course.semesters,
-            )
-              ? course.semesters[0]
-              : course.semesters;
-
-            const details = [
-              subject?.subject_code,
-              professor?.name,
-              semester
-                ? `${semester.year}년 ${semester.term}학기`
-                : null,
-              course.section
-                ? `${course.section}분반`
-                : null,
-            ].filter(
-              (value): value is string =>
-                Boolean(value),
-            );
-
-            return {
-              id: course.id,
-              label: `${
-                subject?.name ?? "과목명 없음"
-              }${
-                details.length > 0
-                  ? ` · ${details.join(" · ")}`
-                  : ""
-              }`,
-            };
-          })
+              return {
+                id: course.id,
+                name:
+                  subject?.name ??
+                  "과목명 없음",
+              };
+            },
+          )
           .filter(
             (
-              option,
-            ): option is CourseOption =>
-              option !== null,
+              subject,
+            ): subject is SubjectOption =>
+              subject !== null,
+          )
+          .sort((a, b) =>
+            a.name.localeCompare(
+              b.name,
+              "ko",
+            ),
           );
 
-        setCourseOptions(options);
-        setPostType(post.post_type);
-        setCourseOfferingId(
+        setSubjects(nextSubjects);
+        setSelectedSubjectId(
           post.course_offering_id,
         );
+        setSelectedTag(post.post_type);
         setTitle(post.title);
-        setContent(post.content ?? "");
+        setBody(post.content ?? "");
         setExistingAttachments(
           (attachmentResult.data ??
             []) as ExistingAttachment[],
@@ -319,7 +370,7 @@ export default function EditPostPage() {
         setErrorMessage(
           error instanceof Error
             ? error.message
-            : "게시글 정보를 불러오지 못했습니다.",
+            : "게시글 정보를 불러오지 못했어요.",
         );
       } finally {
         setIsLoading(false);
@@ -331,41 +382,64 @@ export default function EditPostPage() {
     }
   }, [postId, router]);
 
-  const handleFileChange = (
-    event: ChangeEvent<HTMLInputElement>,
+  const selectedSubject =
+    subjects.find(
+      (subject) =>
+        subject.id ===
+        selectedSubjectId,
+    );
+
+  const plainBody =
+    getPlainTextFromHtml(body).trim();
+
+  const wordCount = plainBody
+    ? plainBody.split(/\s+/).length
+    : 0;
+
+  const handleTitleKey = (
+    event: React.KeyboardEvent<HTMLTextAreaElement>,
+  ) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+    }
+  };
+
+  const handleFileSelection = (
+    event: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const selectedFiles = Array.from(
       event.target.files ?? [],
     );
 
     event.target.value = "";
-    setFileErrorMessage("");
 
     if (selectedFiles.length === 0) {
       return;
     }
 
-    const currentCount =
-      existingAttachments.length +
-      newFiles.length;
+    setFileErrorMessage("");
 
     const remainingCount =
-      MAX_FILE_COUNT - currentCount;
+      MAX_FILE_COUNT -
+      existingAttachments.length -
+      files.length;
 
     if (remainingCount <= 0) {
       setFileErrorMessage(
-        `첨부파일은 최대 ${MAX_FILE_COUNT}개까지 등록할 수 있습니다.`,
+        `첨부파일은 최대 ${MAX_FILE_COUNT}개까지 등록할 수 있어요.`,
       );
       return;
     }
 
-    const oversizedFile = selectedFiles.find(
-      (file) => file.size > MAX_FILE_SIZE,
-    );
+    const oversizedFile =
+      selectedFiles.find(
+        (file) =>
+          file.size > MAX_FILE_SIZE,
+      );
 
     if (oversizedFile) {
       setFileErrorMessage(
-        `${oversizedFile.name} 파일은 20MB를 초과합니다.`,
+        `${oversizedFile.name} 파일이 20MB를 초과해요.`,
       );
       return;
     }
@@ -373,228 +447,311 @@ export default function EditPostPage() {
     const unsupportedFile =
       selectedFiles.find(
         (file) =>
-          !ACCEPTED_EXTENSIONS.has(
-            getFileExtension(file.name),
+          !ACCEPTED_FILE_TYPES.includes(
+            file.type as (
+              typeof ACCEPTED_FILE_TYPES
+            )[number],
           ),
       );
 
     if (unsupportedFile) {
       setFileErrorMessage(
-        `${unsupportedFile.name} 파일 형식은 등록할 수 없습니다.`,
+        `${unsupportedFile.name} 파일 형식은 등록할 수 없어요.`,
       );
       return;
     }
 
     const existingKeys = new Set(
-      newFiles.map(
+      files.map(
         (file) =>
           `${file.name}-${file.size}-${file.lastModified}`,
       ),
     );
 
-    const uniqueFiles = selectedFiles.filter(
-      (file) =>
-        !existingKeys.has(
-          `${file.name}-${file.size}-${file.lastModified}`,
-        ),
-    );
+    const uniqueFiles =
+      selectedFiles.filter(
+        (file) =>
+          !existingKeys.has(
+            `${file.name}-${file.size}-${file.lastModified}`,
+          ),
+      );
 
-    const filesToAdd = uniqueFiles.slice(
+    const nextFiles = uniqueFiles.slice(
       0,
       remainingCount,
     );
 
-    if (uniqueFiles.length > remainingCount) {
+    if (
+      uniqueFiles.length >
+      remainingCount
+    ) {
       setFileErrorMessage(
-        `첨부파일은 최대 ${MAX_FILE_COUNT}개까지 등록할 수 있어 가능한 파일만 추가했습니다.`,
+        `첨부파일은 최대 ${MAX_FILE_COUNT}개까지 등록할 수 있어요. 가능한 파일만 추가했어요.`,
       );
     }
 
-    setNewFiles((previous) => [
+    setFiles((previous) => [
       ...previous,
-      ...filesToAdd,
+      ...nextFiles,
     ]);
   };
 
-  const handleRemoveExistingAttachment = (
+  const removeExistingAttachment = (
     attachment: ExistingAttachment,
   ) => {
-    setFileErrorMessage("");
-
-    setExistingAttachments((previous) =>
-      previous.filter(
-        (item) => item.id !== attachment.id,
-      ),
+    setExistingAttachments(
+      (previous) =>
+        previous.filter(
+          (item) =>
+            item.id !== attachment.id,
+        ),
     );
 
-    setRemovedAttachments((previous) => [
-      ...previous,
-      attachment,
-    ]);
+    setRemovedAttachments(
+      (previous) => [
+        ...previous,
+        attachment,
+      ],
+    );
+
+    setFileErrorMessage("");
   };
 
-  const handleRemoveNewFile = (
-    fileIndex: number,
+  const removeFile = (
+    targetIndex: number,
   ) => {
-    setFileErrorMessage("");
-
-    setNewFiles((previous) =>
+    setFiles((previous) =>
       previous.filter(
-        (_, index) => index !== fileIndex,
+        (_, index) =>
+          index !== targetIndex,
       ),
     );
+
+    setFileErrorMessage("");
+  };
+
+  const formatFileSize = (
+    bytes: number,
+  ) => {
+    if (bytes < 1024) {
+      return `${bytes} B`;
+    }
+
+    if (bytes < 1024 * 1024) {
+      return `${(
+        bytes / 1024
+      ).toFixed(1)} KB`;
+    }
+
+    return `${(
+      bytes /
+      (1024 * 1024)
+    ).toFixed(1)} MB`;
+  };
+
+  const getFileExtension = (
+    fileName: string,
+  ) => {
+    const extension =
+      fileName
+        .split(".")
+        .pop()
+        ?.toLowerCase();
+
+    return extension || "file";
   };
 
   const handleUpdate = async () => {
-    if (isSubmitting) {
-      return;
+    setErrorMessage("");
+
+    let hasError = false;
+
+    if (!selectedTag) {
+      setTagError(true);
+      hasError = true;
     }
 
-    if (!courseOfferingId) {
-      alert("수업을 선택해주세요.");
-      return;
+    if (!selectedSubjectId) {
+      setSubjectError(true);
+      hasError = true;
     }
 
     if (!title.trim()) {
-      alert("제목을 입력해주세요.");
-      return;
+      setErrorMessage(
+        "제목을 입력해주세요.",
+      );
+      hasError = true;
     }
 
-    if (!getPlainTextFromHtml(content)) {
-      alert("내용을 입력해주세요.");
+    if (!plainBody) {
+      setErrorMessage(
+        "본문 내용을 입력해주세요.",
+      );
+      hasError = true;
+    }
+
+
+    if (
+      hasError ||
+      !selectedTag ||
+      !selectedSubjectId ||
+      !userId
+    ) {
       return;
     }
 
     try {
-      setIsSubmitting(true);
-      setFileErrorMessage("");
-
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError) {
-        throw userError;
-      }
-
-      if (!user) {
-        router.replace("/login");
-        return;
-      }
+      setIsSaving(true);
 
       const uploadedPaths: string[] = [];
       const insertedAttachmentIds: string[] = [];
 
       try {
-        const attachmentRows: {
-          post_id: string;
-          uploader_id: string;
-          original_name: string;
-          storage_path: string;
-          mime_type: string;
-          size_bytes: number;
-          display_order: number;
-        }[] = [];
+        const attachmentRows:
+          AttachmentInsertRow[] = [];
 
         for (
           let index = 0;
-          index < newFiles.length;
+          index < files.length;
           index += 1
         ) {
-          const file = newFiles[index];
+          const file = files[index];
           const extension =
             getFileExtension(file.name);
 
           const storagePath =
-            `${user.id}/${postId}/${crypto.randomUUID()}.${extension}`;
+            `${userId}/${postId}/${crypto.randomUUID()}.${extension}`;
 
-          const { error: uploadError } =
-            await supabase.storage
-              .from("post-files")
-              .upload(storagePath, file, {
+          const {
+            error: uploadError,
+          } = await supabase.storage
+            .from("post-files")
+            .upload(
+              storagePath,
+              file,
+              {
                 contentType:
                   file.type ||
                   "application/octet-stream",
                 cacheControl: "3600",
                 upsert: false,
-              });
+              },
+            );
 
           if (uploadError) {
             throw uploadError;
           }
 
-          uploadedPaths.push(storagePath);
+          uploadedPaths.push(
+            storagePath,
+          );
 
           attachmentRows.push({
             post_id: postId,
-            uploader_id: user.id,
-            original_name: file.name,
-            storage_path: storagePath,
+            uploader_id: userId,
+            original_name:
+              file.name,
+            storage_path:
+              storagePath,
             mime_type:
               file.type ||
               "application/octet-stream",
-            size_bytes: file.size,
+            size_bytes:
+              file.size,
             display_order:
               existingAttachments.length +
               index,
           });
         }
 
-        if (attachmentRows.length > 0) {
+        if (
+          attachmentRows.length > 0
+        ) {
           const {
-            data: insertedRows,
-            error: insertError,
+            data:
+              insertedAttachments,
+            error:
+              attachmentInsertError,
           } = await supabase
-            .from("post_attachments")
-            .insert(attachmentRows)
+            .from(
+              "post_attachments",
+            )
+            .insert(
+              attachmentRows,
+            )
             .select("id");
 
-          if (insertError) {
-            throw insertError;
+          if (
+            attachmentInsertError
+          ) {
+            throw attachmentInsertError;
           }
 
           insertedAttachmentIds.push(
-            ...((insertedRows ?? []) as {
-              id: string;
-            }[]).map((row) => row.id),
+            ...(
+              insertedAttachments ??
+              []
+            ).map(
+              (
+                attachment: {
+                  id: string;
+                },
+              ) =>
+                attachment.id,
+            ),
           );
         }
 
-        const { error: postUpdateError } =
-          await supabase
-            .from("posts")
-            .update({
-              course_offering_id:
-                courseOfferingId,
-              post_type: postType,
-              title: title.trim(),
-              content: content.trim(),
-              updated_at:
-                new Date().toISOString(),
-            })
-            .eq("id", postId)
-            .eq("author_id", user.id);
+        const {
+          error: postUpdateError,
+        } = await supabase
+          .from("posts")
+          .update({
+            course_offering_id:
+              selectedSubjectId,
+            post_type:
+              selectedTag,
+            title: title.trim(),
+            content: body,
+            price: 1,
+            updated_at:
+              new Date().toISOString(),
+          })
+          .eq("id", postId)
+          .eq(
+            "author_id",
+            userId,
+          );
 
         if (postUpdateError) {
           throw postUpdateError;
         }
 
-        if (removedAttachments.length > 0) {
+        if (
+          removedAttachments.length >
+          0
+        ) {
           const removedIds =
             removedAttachments.map(
-              (attachment) => attachment.id,
+              (attachment) =>
+                attachment.id,
             );
 
-          const { error: deleteRowsError } =
-            await supabase
-              .from("post_attachments")
-              .delete()
-              .in("id", removedIds)
-              .eq("post_id", postId);
+          const {
+            error:
+              deleteAttachmentRowsError,
+          } = await supabase
+            .from(
+              "post_attachments",
+            )
+            .delete()
+            .in("id", removedIds)
+            .eq("post_id", postId);
 
-          if (deleteRowsError) {
-            throw deleteRowsError;
+          if (
+            deleteAttachmentRowsError
+          ) {
+            throw deleteAttachmentRowsError;
           }
 
           const removedPaths =
@@ -603,27 +760,39 @@ export default function EditPostPage() {
                 attachment.storage_path,
             );
 
-          const { error: deleteStorageError } =
-            await supabase.storage
-              .from("post-files")
-              .remove(removedPaths);
+          const {
+            error:
+              deleteStorageError,
+          } = await supabase.storage
+            .from("post-files")
+            .remove(removedPaths);
 
           if (deleteStorageError) {
             console.error(
-              "기존 첨부파일 스토리지 삭제 실패:",
+              "기존 첨부파일 Storage 삭제 실패:",
               deleteStorageError,
             );
           }
         }
       } catch (updateError) {
-        if (insertedAttachmentIds.length > 0) {
+        if (
+          insertedAttachmentIds.length >
+          0
+        ) {
           await supabase
-            .from("post_attachments")
+            .from(
+              "post_attachments",
+            )
             .delete()
-            .in("id", insertedAttachmentIds);
+            .in(
+              "id",
+              insertedAttachmentIds,
+            );
         }
 
-        if (uploadedPaths.length > 0) {
+        if (
+          uploadedPaths.length > 0
+        ) {
           await supabase.storage
             .from("post-files")
             .remove(uploadedPaths);
@@ -632,506 +801,1210 @@ export default function EditPostPage() {
         throw updateError;
       }
 
-      alert("게시글이 수정되었습니다.");
-      router.replace(`/posts/${postId}`);
+      router.replace(
+        `/posts/${postId}`,
+      );
       router.refresh();
     } catch (error) {
       console.error(
-        "게시글 수정 실패:",
+        "노트 수정 실패:",
         error,
       );
 
-      alert(
+      setErrorMessage(
         error instanceof Error
-          ? `게시글 수정에 실패했습니다.\n${error.message}`
-          : "게시글 수정에 실패했습니다.",
+          ? error.message
+          : "노트를 수정하지 못했어요.",
       );
-    } finally {
-      setIsSubmitting(false);
+
+      setIsSaving(false);
     }
+  };
+
+  const tagStyle = (
+    key: TagType,
+  ): React.CSSProperties => {
+    const isSelected =
+      selectedTag === key;
+
+    if (key === "study_trail") {
+      return {
+        background: isSelected
+          ? "var(--cs-purple-bg)"
+          : "transparent",
+        color: isSelected
+          ? "var(--cs-purple-dark)"
+          : "var(--cs-ink-soft)",
+        border: `1px solid ${
+          isSelected
+            ? "var(--cs-purple)"
+            : "var(--cs-border-str)"
+        }`,
+      };
+    }
+
+    return {
+      background: isSelected
+        ? "var(--cs-bg)"
+        : "transparent",
+      color: isSelected
+        ? "var(--cs-ink)"
+        : "var(--cs-ink-soft)",
+      border:
+        "1px solid var(--cs-border-str)",
+    };
+  };
+
+  const goBack = () => {
+    router.push(
+      `/posts/${postId}`,
+    );
   };
 
   if (isLoading) {
     return (
-      <section className={styles.page}>
-        <div className={styles.editorContainer}>
-          게시글 정보를 불러오는 중입니다.
-        </div>
-      </section>
-    );
-  }
-
-  if (errorMessage) {
-    return (
-      <section className={styles.page}>
-        <div className={styles.editorContainer}>
-          <p>{errorMessage}</p>
-
-          <button
-            type="button"
-            onClick={() =>
-              router.replace(`/posts/${postId}`)
-            }
-          >
-            상세화면으로 돌아가기
-          </button>
-        </div>
-      </section>
+      <div
+        style={{
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background:
+            "var(--cs-surface)",
+          color:
+            "var(--cs-ink-faint)",
+          fontSize: 13,
+        }}
+      >
+        게시글 정보를 불러오는 중이에요.
+      </div>
     );
   }
 
   return (
-    <section className={styles.page}>
-      <header className={styles.pageHeader}>
-        <div className={styles.breadcrumb}>
+    <div
+      style={{
+        height: "100%",
+        overflowY: "auto",
+        background:
+          "var(--cs-surface)",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      {/* 상단 바 */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent:
+            "space-between",
+          padding: "10px 20px",
+          borderBottom:
+            "1px solid var(--cs-border)",
+          background:
+            "var(--cs-surface)",
+          flexShrink: 0,
+          gap: 12,
+        }}
+      >
+        {/* 왼쪽 영역 */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            minWidth: 0,
+          }}
+        >
           <button
             type="button"
-            className={styles.backButton}
-            onClick={() => router.back()}
-            aria-label="이전 페이지로 이동"
+            onClick={goBack}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color:
+                "var(--cs-ink-faint)",
+              fontSize: 13,
+              fontFamily: "inherit",
+              padding: "4px 6px",
+              borderRadius:
+                "var(--cs-radius-sm)",
+              transition:
+                "background 0.1s, color 0.1s",
+            }}
+            onMouseEnter={(
+              event,
+            ) => {
+              event.currentTarget.style.background =
+                "var(--cs-bg)";
+
+              event.currentTarget.style.color =
+                "var(--cs-ink)";
+            }}
+            onMouseLeave={(
+              event,
+            ) => {
+              event.currentTarget.style.background =
+                "none";
+
+              event.currentTarget.style.color =
+                "var(--cs-ink-faint)";
+            }}
           >
-            ←
+            ← 뒤로
           </button>
 
-          <span>노트 수정</span>
+          <span
+            style={{
+              color:
+                "var(--cs-border-str)",
+              fontSize: 13,
+            }}
+          >
+            /
+          </span>
+
+          {/* 과목 선택 */}
+          <div
+            style={{
+              position: "relative",
+            }}
+          >
+            <button
+              type="button"
+              onClick={(
+                event,
+              ) => {
+                event.stopPropagation();
+
+                setShowSubjectDropdown(
+                  (previous) =>
+                    !previous,
+                );
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                fontSize: 13,
+                fontWeight: 500,
+                color: selectedSubject
+                  ? "var(--cs-ink)"
+                  : "var(--cs-ink-faint)",
+                padding: "4px 8px",
+                borderRadius:
+                  "var(--cs-radius-sm)",
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                transition:
+                  "background 0.1s",
+              }}
+              onMouseEnter={(
+                event,
+              ) => {
+                event.currentTarget.style.background =
+                  "var(--cs-bg)";
+              }}
+              onMouseLeave={(
+                event,
+              ) => {
+                event.currentTarget.style.background =
+                  "none";
+              }}
+            >
+              {selectedSubject && (
+                <span
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius:
+                      "var(--cs-radius-full)",
+                    background:
+                      "var(--cs-purple)",
+                    flexShrink: 0,
+                  }}
+                />
+              )}
+
+              {selectedSubject
+                ? selectedSubject.name
+                : "과목 선택"}
+
+              <span
+                style={{
+                  fontSize: 10,
+                  opacity: 0.45,
+                }}
+              >
+                ▾
+              </span>
+            </button>
+
+            {showSubjectDropdown && (
+              <div
+                onClick={(
+                  event,
+                ) =>
+                  event.stopPropagation()
+                }
+                style={{
+                  position: "absolute",
+                  top: "110%",
+                  left: 0,
+                  zIndex: 50,
+                  background:
+                    "var(--cs-surface)",
+                  border:
+                    "1px solid var(--cs-border)",
+                  borderRadius:
+                    "var(--cs-radius-dropdown)",
+                  padding: 6,
+                  boxShadow:
+                    "var(--cs-shadow-dropdown)",
+                  minWidth: 200,
+                  maxHeight: 280,
+                  overflowY: "auto",
+                }}
+              >
+                {subjects.length ===
+                0 ? (
+                  <div
+                    style={{
+                      padding:
+                        "10px 12px",
+                      fontSize: 12,
+                      color:
+                        "var(--cs-ink-faint)",
+                    }}
+                  >
+                    추가한 과목이
+                    없습니다.
+                  </div>
+                ) : (
+                  subjects.map(
+                    (subject) => (
+                      <div
+                        key={
+                          subject.id
+                        }
+                        onClick={() => {
+                          setSelectedSubjectId(
+                            subject.id,
+                          );
+
+                          setSubjectError(
+                            false,
+                          );
+
+                          setShowSubjectDropdown(
+                            false,
+                          );
+                        }}
+                        style={{
+                          display:
+                            "flex",
+                          alignItems:
+                            "center",
+                          gap: 8,
+                          padding:
+                            "8px 10px",
+                          borderRadius:
+                            "var(--cs-radius-md)",
+                          cursor:
+                            "pointer",
+                          fontSize: 13.5,
+                          color:
+                            "var(--cs-ink)",
+                          background:
+                            subject.id ===
+                            selectedSubjectId
+                              ? "var(--cs-purple-bg)"
+                              : "transparent",
+                          transition:
+                            "background 0.1s",
+                        }}
+                        onMouseEnter={(
+                          event,
+                        ) => {
+                          event.currentTarget.style.background =
+                            subject.id ===
+                            selectedSubjectId
+                              ? "var(--cs-purple-bg)"
+                              : "var(--cs-bg)";
+                        }}
+                        onMouseLeave={(
+                          event,
+                        ) => {
+                          event.currentTarget.style.background =
+                            subject.id ===
+                            selectedSubjectId
+                              ? "var(--cs-purple-bg)"
+                              : "transparent";
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 7,
+                            height: 7,
+                            borderRadius:
+                              "var(--cs-radius-full)",
+                            background:
+                              subject.id ===
+                              selectedSubjectId
+                                ? "var(--cs-purple)"
+                                : "var(--cs-border-str)",
+                            flexShrink: 0,
+                          }}
+                        />
+
+                        {subject.name}
+                      </div>
+                    ),
+                  )
+                )}
+              </div>
+            )}
+          </div>
+
+          <span
+            style={{
+              color:
+                "var(--cs-border-str)",
+              fontSize: 13,
+            }}
+          >
+            /
+          </span>
+
+          <span
+            style={{
+              fontSize: 13,
+              color:
+                "var(--cs-ink-faint)",
+            }}
+          >
+            노트 수정
+          </span>
         </div>
 
-        <button
-          type="button"
-          className={styles.publishButton}
-          onClick={handleUpdate}
-          disabled={isSubmitting}
+        {/* 오른쪽 영역 */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexShrink: 0,
+          }}
         >
-          {isSubmitting
-            ? "수정 중..."
-            : "수정 완료"}
-        </button>
-      </header>
+          {wordCount > 0 && (
+            <span
+              style={{
+                fontSize: 12,
+                color:
+                  "var(--cs-ink-faint)",
+              }}
+            >
+              {wordCount}단어
+            </span>
+          )}
 
-      <div className={styles.editorContainer}>
-        <section className={styles.typeSection}>
-          <p className={styles.sectionLabel}>
-            자료 유형
-          </p>
+          <button
+            type="button"
+            onClick={() =>
+              void handleUpdate()
+            }
+            disabled={isSaving}
+            style={{
+              background: isSaving
+                ? "var(--cs-purple-bg)"
+                : "var(--cs-purple)",
+              color: isSaving
+                ? "var(--cs-purple-dark)"
+                : "var(--cs-surface)",
+              border: "none",
+              borderRadius:
+                "var(--cs-radius-tag)",
+              padding: "8px 18px",
+              fontSize: 13.5,
+              fontWeight: 600,
+              fontFamily: "inherit",
+              cursor: isSaving
+                ? "default"
+                : "pointer",
+              transition:
+                "background 0.15s",
+            }}
+            onMouseEnter={(
+              event,
+            ) => {
+              if (!isSaving) {
+                event.currentTarget.style.background =
+                  "var(--cs-purple-hover)";
+              }
+            }}
+            onMouseLeave={(
+              event,
+            ) => {
+              if (!isSaving) {
+                event.currentTarget.style.background =
+                  "var(--cs-purple)";
+              }
+            }}
+          >
+            {isSaving
+              ? "수정 중..."
+              : "수정 완료"}
+          </button>
+        </div>
+      </div>
 
-          <div className={styles.typeButtons}>
-            <TypeButton
-              label="Notes"
-              value="notes"
-              selectedType={postType}
-              onSelect={setPostType}
-            />
+      {/* 본문 */}
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          justifyContent: "center",
+          padding:
+            "0 24px 80px",
+        }}
+        onClick={() =>
+          setShowSubjectDropdown(
+            false,
+          )
+        }
+      >
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 720,
+            paddingTop: 48,
+          }}
+        >
+          {errorMessage && (
+            <div
+              style={{
+                marginBottom: 20,
+                padding:
+                  "10px 12px",
+                borderRadius:
+                  "var(--cs-radius-md)",
+                background:
+                  "var(--cs-exam-bg)",
+                color:
+                  "var(--cs-error)",
+                fontSize: 12.5,
+                lineHeight: 1.6,
+              }}
+            >
+              {errorMessage}
+            </div>
+          )}
 
-            <TypeButton
-              label="Exam"
-              value="exam"
-              selectedType={postType}
-              onSelect={setPostType}
-            />
+          {/* 자료 유형 */}
+          <div
+            style={{
+              marginBottom: 28,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 500,
+                color:
+                  "var(--cs-ink-faint)",
+                marginBottom: 10,
+              }}
+            >
+              자료 유형
 
-            <TypeButton
-              label="Reference"
-              value="reference"
-              selectedType={postType}
-              onSelect={setPostType}
-            />
+              {tagError &&
+                !selectedTag && (
+                  <span
+                    style={{
+                      color:
+                        "var(--cs-error)",
+                      marginLeft: 8,
+                      fontWeight: 400,
+                    }}
+                  >
+                    — 유형을 선택해주세요
+                  </span>
+                )}
 
-            <TypeButton
-              label="Study Trail"
-              value="study_trail"
-              selectedType={postType}
-              onSelect={setPostType}
-            />
+              {subjectError &&
+                !selectedSubjectId && (
+                  <span
+                    style={{
+                      color:
+                        "var(--cs-error)",
+                      marginLeft: 8,
+                      fontWeight: 400,
+                    }}
+                  >
+                    — 과목을 선택해주세요
+                  </span>
+                )}
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                gap: 7,
+                flexWrap: "wrap",
+              }}
+            >
+              {TAG_OPTIONS.map(
+                (option) => {
+                  const isSelected =
+                    selectedTag ===
+                    option.key;
+
+                  const style =
+                    tagStyle(
+                      option.key,
+                    );
+
+                  return (
+                    <button
+                      key={
+                        option.key
+                      }
+                      type="button"
+                      onClick={() => {
+                        setSelectedTag(
+                          option.key,
+                        );
+
+                        setTagError(
+                          false,
+                        );
+                      }}
+                      style={{
+                        ...style,
+                        borderRadius:
+                          "var(--cs-radius-md)",
+                        padding:
+                          "5px 12px",
+                        fontSize: 13,
+                        fontWeight:
+                          isSelected
+                            ? 600
+                            : 400,
+                        fontFamily:
+                          "inherit",
+                        cursor:
+                          "pointer",
+                        transition:
+                          "all 0.12s",
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                },
+              )}
+            </div>
           </div>
-        </section>
 
-        <div className={styles.formGroup}>
-          <label htmlFor="courseOffering">
-            수업
-          </label>
-
-          <select
-            id="courseOffering"
-            value={courseOfferingId}
+          {/* 제목 */}
+          <textarea
+            ref={titleRef}
+            value={title}
             onChange={(event) =>
-              setCourseOfferingId(
+              setTitle(
                 event.target.value,
               )
             }
-          >
-            <option value="">
-              수업을 선택해주세요
-            </option>
-
-            {courseOptions.map((course) => (
-              <option
-                key={course.id}
-                value={course.id}
-              >
-                {course.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className={styles.formGroup}>
-          <label htmlFor="title">제목</label>
-
-          <input
-            id="title"
-            type="text"
-            value={title}
-            onChange={(event) =>
-              setTitle(event.target.value)
+            onKeyDown={
+              handleTitleKey
             }
             placeholder="제목을 입력하세요"
-            maxLength={150}
+            rows={1}
+            disabled={isSaving}
+            style={{
+              width: "100%",
+              border: "none",
+              outline: "none",
+              background:
+                "transparent",
+              resize: "none",
+              fontSize: 34,
+              fontWeight: 700,
+              lineHeight: 1.25,
+              fontFamily: "inherit",
+              color:
+                "var(--cs-ink)",
+              marginBottom: 6,
+              overflow: "hidden",
+              opacity: isSaving
+                ? 0.7
+                : 1,
+            }}
+            onInput={(event) => {
+              const textarea =
+                event.currentTarget;
+
+              textarea.style.height =
+                "auto";
+
+              textarea.style.height =
+                `${textarea.scrollHeight}px`;
+            }}
           />
 
-          <div className={styles.titleLength}>
-            {title.length}/150
-          </div>
-        </div>
-
-        <section
-          className={styles.contentSection}
-        >
-          <RichTextEditor
-            key={`${postId}-${isLoading}`}
-            value={content}
-            onChange={setContent}
-            disabled={isSubmitting}
-          />
-
-        </section>
-
-        <section
-          className={styles.attachmentSection}
-        >
+          {/* 구분선 */}
           <div
-            className={styles.attachmentHeader}
-          >
-            <div>
-              <p
-                className={styles.attachmentTitle}
-              >
-                첨부파일
-              </p>
-
-              <p
-                className={
-                  styles.attachmentDescription
-                }
-              >
-                PDF, 이미지, Word, PowerPoint 파일을
-                파일당 최대 20MB까지 등록할 수 있습니다.
-              </p>
-            </div>
-
-            <span className={styles.fileCount}>
-              {existingAttachments.length +
-                newFiles.length}
-              /{MAX_FILE_COUNT}
-            </span>
-          </div>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            className={styles.hiddenFileInput}
-            accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.ppt,.pptx"
-            onChange={handleFileChange}
-            disabled={isSubmitting}
+            style={{
+              height: 1,
+              background:
+                "var(--cs-border)",
+              marginBottom: 24,
+            }}
           />
 
-          <button
-            type="button"
-            className={styles.fileSelectButton}
-            onClick={() =>
-              fileInputRef.current?.click()
-            }
-            disabled={
-              isSubmitting ||
-              existingAttachments.length +
-                newFiles.length >=
-                MAX_FILE_COUNT
-            }
+          {/* Tiptap 에디터 */}
+          <RichTextEditor
+            value={body}
+            onChange={setBody}
+            disabled={isSaving}
+          />
+
+          <div
+            style={{
+              marginTop: 14,
+              fontSize: 12,
+              color:
+                "var(--cs-ink-faint)",
+              lineHeight: 1.7,
+            }}
           >
-            <span className={styles.uploadIcon}>
-              ↑
-            </span>
+          </div>
 
-            <span>
-              파일 추가하기
-            </span>
+          {/* 첨부파일 */}
 
-            <small>
-              파일당 최대 20MB · 최대 5개
-            </small>
-          </button>
-
-          {fileErrorMessage && (
-            <p
+          <section
+            style={{
+              marginTop: 28,
+              padding: 18,
+              border:
+                "1px solid #ded9ee",
+              borderRadius: 10,
+              background: "#ffffff",
+            }}
+          >
+            <div
               style={{
-                margin: "10px 0 0",
-                color: "var(--cs-error)",
-                fontSize: 11,
-                lineHeight: 1.5,
+                display: "flex",
+                alignItems:
+                  "flex-start",
+                justifyContent:
+                  "space-between",
+                gap: 16,
+                marginBottom: 14,
               }}
             >
-              {fileErrorMessage}
-            </p>
-          )}
+              <div>
+                <h3
+                  style={{
+                    margin: "0 0 5px",
+                    color:
+                      "var(--cs-ink)",
+                    fontSize: 12,
+                    fontWeight: 700,
+                  }}
+                >
+                  첨부파일
+                </h3>
 
-          {(existingAttachments.length > 0 ||
-            newFiles.length > 0) && (
-            <ul className={styles.fileList}>
-              {existingAttachments.map(
-                (attachment) => (
-                  <li
-                    key={attachment.id}
-                    className={styles.fileItem}
-                  >
-                    <div
-                      className={
-                        styles.fileInformation
-                      }
+                <p
+                  style={{
+                    margin: 0,
+                    color:
+                      "var(--cs-ink-faint)",
+                    fontSize: 10.5,
+                    lineHeight: 1.6,
+                  }}
+                >
+                  PDF, 이미지, Word,
+                  PowerPoint 파일을 파일당
+                  최대 20MB까지 등록할 수
+                  있어요.
+                </p>
+              </div>
+
+              <span
+                style={{
+                  flexShrink: 0,
+                  color:
+                    existingAttachments.length +
+                      files.length ===
+                    MAX_FILE_COUNT
+                      ? "var(--cs-purple-dark)"
+                      : "var(--cs-ink-faint)",
+                  fontSize: 11,
+                  fontWeight: 700,
+                }}
+              >
+                {existingAttachments.length +
+                  files.length}/
+                {MAX_FILE_COUNT}
+              </span>
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.ppt,.pptx"
+              onChange={
+                handleFileSelection
+              }
+              disabled={
+                isSaving ||
+                existingAttachments.length +
+                  files.length >=
+                  MAX_FILE_COUNT
+              }
+              style={{
+                display: "none",
+              }}
+            />
+
+            <button
+              type="button"
+              onClick={() =>
+                fileInputRef.current?.click()
+              }
+              disabled={
+                isSaving ||
+                existingAttachments.length +
+                  files.length >=
+                  MAX_FILE_COUNT
+              }
+              style={{
+                display: "flex",
+                width: "100%",
+                minHeight: 110,
+                alignItems: "center",
+                justifyContent:
+                  "center",
+                flexDirection:
+                  "column",
+                gap: 8,
+                border:
+                  "1px dashed #cfc7e8",
+                borderRadius: 9,
+                background:
+                  "#faf9fd",
+                color:
+                  "var(--cs-ink-soft)",
+                fontFamily:
+                  "inherit",
+                fontSize: 12,
+                cursor:
+                  isSaving ||
+                  files.length >=
+                    MAX_FILE_COUNT
+                    ? "not-allowed"
+                    : "pointer",
+                opacity:
+                  isSaving ||
+                  files.length >=
+                    MAX_FILE_COUNT
+                    ? 0.6
+                    : 1,
+              }}
+            >
+              <span
+                aria-hidden="true"
+                style={{
+                  display: "flex",
+                  width: 34,
+                  height: 34,
+                  alignItems:
+                    "center",
+                  justifyContent:
+                    "center",
+                  border:
+                    "1px solid #ded9ee",
+                  borderRadius: "50%",
+                  background:
+                    "#ffffff",
+                  color:
+                    "var(--cs-purple-dark)",
+                  fontSize: 17,
+                }}
+              >
+                ↑
+              </span>
+
+              <strong
+                style={{
+                  fontSize: 11.5,
+                }}
+              >
+                파일 선택하기
+              </strong>
+
+              <small
+                style={{
+                  color:
+                    "var(--cs-ink-faint)",
+                  fontSize: 10,
+                }}
+              >
+                최대 5개 · 파일당 20MB
+              </small>
+            </button>
+
+            {fileErrorMessage && (
+              <p
+                style={{
+                  margin:
+                    "10px 0 0",
+                  color:
+                    "var(--cs-error)",
+                  fontSize: 11,
+                  lineHeight: 1.5,
+                }}
+              >
+                {fileErrorMessage}
+              </p>
+            )}
+
+            {existingAttachments.length >
+              0 && (
+              <ul
+                style={{
+                  display: "flex",
+                  flexDirection:
+                    "column",
+                  gap: 8,
+                  margin: "14px 0 0",
+                  padding: 0,
+                  listStyle: "none",
+                }}
+              >
+                {existingAttachments.map(
+                  (attachment) => (
+                    <li
+                      key={attachment.id}
+                      style={{
+                        display:
+                          "flex",
+                        minHeight: 56,
+                        alignItems:
+                          "center",
+                        justifyContent:
+                          "space-between",
+                        gap: 12,
+                        padding:
+                          "8px 11px",
+                        border:
+                          "1px solid #e5e1f0",
+                        borderRadius: 8,
+                        background:
+                          "#ffffff",
+                      }}
                     >
-                      <span
-                        className={
-                          styles.fileIcon
-                        }
-                      >
-                        {getFileIcon(
-                          attachment.original_name,
-                        )}
-                      </span>
-
                       <div
-                        className={
-                          styles.fileText
-                        }
+                        style={{
+                          display:
+                            "flex",
+                          minWidth: 0,
+                          alignItems:
+                            "center",
+                          gap: 10,
+                        }}
                       >
                         <span
-                          className={
-                            styles.fileName
-                          }
+                          style={{
+                            display:
+                              "flex",
+                            width: 38,
+                            height: 38,
+                            flexShrink: 0,
+                            alignItems:
+                              "center",
+                            justifyContent:
+                              "center",
+                            borderRadius:
+                              7,
+                            background:
+                              "#f0edf8",
+                            color:
+                              "var(--cs-purple-dark)",
+                            fontSize: 9,
+                            fontWeight:
+                              800,
+                            textTransform:
+                              "uppercase",
+                          }}
                         >
-                          {
-                            attachment.original_name
-                          }
+                          {getFileExtension(
+                            attachment.original_name,
+                          )}
                         </span>
 
                         <span
-                          className={
-                            styles.fileSize
-                          }
+                          style={{
+                            display:
+                              "flex",
+                            minWidth: 0,
+                            flexDirection:
+                              "column",
+                            gap: 4,
+                          }}
                         >
-                          {formatFileSize(
-                            attachment.size_bytes ??
-                              0,
-                          )}
-                          {" · 기존 파일"}
+                          <strong
+                            style={{
+                              overflow:
+                                "hidden",
+                              color:
+                                "var(--cs-ink)",
+                              fontSize:
+                                11,
+                              fontWeight:
+                                650,
+                              textOverflow:
+                                "ellipsis",
+                              whiteSpace:
+                                "nowrap",
+                            }}
+                          >
+                            {
+                              attachment.original_name
+                            }
+                          </strong>
+
+                          <small
+                            style={{
+                              color:
+                                "var(--cs-ink-faint)",
+                              fontSize:
+                                10,
+                            }}
+                          >
+                            {formatFileSize(
+                              attachment.size_bytes ??
+                                0,
+                            )}
+                            {" · 기존 파일"}
+                          </small>
                         </span>
                       </div>
-                    </div>
 
-                    <button
-                      type="button"
-                      className={
-                        styles.removeFileButton
-                      }
-                      onClick={() =>
-                        handleRemoveExistingAttachment(
-                          attachment,
-                        )
-                      }
-                      aria-label={`${attachment.original_name} 삭제`}
-                      disabled={isSubmitting}
-                    >
-                      ×
-                    </button>
-                  </li>
-                ),
-              )}
-
-              {newFiles.map((file, index) => (
-                <li
-                  key={`${file.name}-${file.size}-${file.lastModified}`}
-                  className={styles.fileItem}
-                >
-                  <div
-                    className={
-                      styles.fileInformation
-                    }
-                  >
-                    <span
-                      className={
-                        styles.fileIcon
-                      }
-                    >
-                      {getFileIcon(file.name)}
-                    </span>
-
-                    <div
-                      className={
-                        styles.fileText
-                      }
-                    >
-                      <span
-                        className={
-                          styles.fileName
+                      <button
+                        type="button"
+                        onClick={() =>
+                          removeExistingAttachment(
+                            attachment,
+                          )
                         }
-                      >
-                        {file.name}
-                      </span>
-
-                      <span
-                        className={
-                          styles.fileSize
+                        disabled={
+                          isSaving
                         }
+                        aria-label={`${attachment.original_name} 삭제`}
+                        title="첨부파일 삭제"
+                        style={{
+                          display:
+                            "flex",
+                          width: 30,
+                          height: 30,
+                          flexShrink: 0,
+                          alignItems:
+                            "center",
+                          justifyContent:
+                            "center",
+                          border: 0,
+                          borderRadius:
+                            6,
+                          background:
+                            "transparent",
+                          color:
+                            "var(--cs-ink-faint)",
+                          fontSize: 18,
+                          cursor:
+                            isSaving
+                              ? "not-allowed"
+                              : "pointer",
+                        }}
                       >
-                        {formatFileSize(
-                          file.size,
-                        )}
-                        {" · 새 파일"}
-                      </span>
-                    </div>
-                  </div>
+                        ×
+                      </button>
+                    </li>
+                  ),
+                )}
+              </ul>
+            )}
 
-                  <button
-                    type="button"
-                    className={
-                      styles.removeFileButton
-                    }
-                    onClick={() =>
-                      handleRemoveNewFile(index)
-                    }
-                    aria-label={`${file.name} 삭제`}
-                    disabled={isSubmitting}
-                  >
-                    ×
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+            {files.length > 0 && (
+              <ul
+                style={{
+                  display: "flex",
+                  flexDirection:
+                    "column",
+                  gap: 8,
+                  margin: "14px 0 0",
+                  padding: 0,
+                  listStyle: "none",
+                }}
+              >
+                {files.map(
+                  (file, index) => (
+                    <li
+                      key={`${file.name}-${file.size}-${file.lastModified}`}
+                      style={{
+                        display:
+                          "flex",
+                        minHeight: 56,
+                        alignItems:
+                          "center",
+                        justifyContent:
+                          "space-between",
+                        gap: 12,
+                        padding:
+                          "8px 11px",
+                        border:
+                          "1px solid #e5e1f0",
+                        borderRadius: 8,
+                        background:
+                          "#ffffff",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display:
+                            "flex",
+                          minWidth: 0,
+                          alignItems:
+                            "center",
+                          gap: 10,
+                        }}
+                      >
+                        <span
+                          style={{
+                            display:
+                              "flex",
+                            width: 38,
+                            height: 38,
+                            flexShrink: 0,
+                            alignItems:
+                              "center",
+                            justifyContent:
+                              "center",
+                            borderRadius:
+                              7,
+                            background:
+                              "#f0edf8",
+                            color:
+                              "var(--cs-purple-dark)",
+                            fontSize: 9,
+                            fontWeight:
+                              800,
+                            textTransform:
+                              "uppercase",
+                          }}
+                        >
+                          {getFileExtension(
+                            file.name,
+                          )}
+                        </span>
+
+                        <span
+                          style={{
+                            display:
+                              "flex",
+                            minWidth: 0,
+                            flexDirection:
+                              "column",
+                            gap: 4,
+                          }}
+                        >
+                          <strong
+                            style={{
+                              overflow:
+                                "hidden",
+                              color:
+                                "var(--cs-ink)",
+                              fontSize:
+                                11,
+                              fontWeight:
+                                650,
+                              textOverflow:
+                                "ellipsis",
+                              whiteSpace:
+                                "nowrap",
+                            }}
+                          >
+                            {file.name}
+                          </strong>
+
+                          <small
+                            style={{
+                              color:
+                                "var(--cs-ink-faint)",
+                              fontSize:
+                                10,
+                            }}
+                          >
+                            {formatFileSize(
+                              file.size,
+                            )}
+                          </small>
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          removeFile(
+                            index,
+                          )
+                        }
+                        disabled={
+                          isSaving
+                        }
+                        aria-label={`${file.name} 삭제`}
+                        title="첨부파일 삭제"
+                        style={{
+                          display:
+                            "flex",
+                          width: 30,
+                          height: 30,
+                          flexShrink: 0,
+                          alignItems:
+                            "center",
+                          justifyContent:
+                            "center",
+                          border: 0,
+                          borderRadius:
+                            6,
+                          background:
+                            "transparent",
+                          color:
+                            "var(--cs-ink-faint)",
+                          fontSize: 18,
+                          cursor:
+                            isSaving
+                              ? "not-allowed"
+                              : "pointer",
+                        }}
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ),
+                )}
+              </ul>
+            )}
+          </section>
+        </div>
       </div>
-    </section>
+    </div>
   );
-}
-
-type TypeButtonProps = {
-  label: string;
-  value: PostType;
-  selectedType: PostType;
-  onSelect: (type: PostType) => void;
-};
-
-function TypeButton({
-  label,
-  value,
-  selectedType,
-  onSelect,
-}: TypeButtonProps) {
-  return (
-    <button
-      type="button"
-      className={
-        selectedType === value
-          ? styles.activeType
-          : styles.typeButton
-      }
-      onClick={() => onSelect(value)}
-    >
-      {label}
-    </button>
-  );
-}
-
-
-
-function getPlainTextFromHtml(
-  html: string,
-) {
-  if (typeof window === "undefined") {
-    return "";
-  }
-
-  const element =
-    document.createElement("div");
-
-  element.innerHTML = html;
-
-  return (
-    element.textContent ??
-    element.innerText ??
-    ""
-  ).trim();
-}
-
-function getFileExtension(
-  fileName: string,
-) {
-  return (
-    fileName
-      .split(".")
-      .pop()
-      ?.toLowerCase() ?? ""
-  );
-}
-
-function formatFileSize(size: number) {
-  if (size < 1024) {
-    return `${size} B`;
-  }
-
-  if (size < 1024 * 1024) {
-    return `${(size / 1024).toFixed(
-      1,
-    )} KB`;
-  }
-
-  return `${(
-    size /
-    (1024 * 1024)
-  ).toFixed(1)} MB`;
-}
-
-function getFileIcon(fileName: string) {
-  const extension =
-    fileName.split(".").pop()?.toLowerCase() ??
-    "";
-
-  if (extension === "pdf") {
-    return "PDF";
-  }
-
-  if (
-    ["png", "jpg", "jpeg"].includes(extension)
-  ) {
-    return "IMG";
-  }
-
-  if (
-    ["ppt", "pptx"].includes(extension)
-  ) {
-    return "PPT";
-  }
-
-  if (
-    ["doc", "docx", "hwp", "hwpx"].includes(
-      extension,
-    )
-  ) {
-    return "DOC";
-  }
-
-  if (extension === "zip") {
-    return "ZIP";
-  }
-
-  return "FILE";
 }

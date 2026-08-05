@@ -147,6 +147,7 @@ export default function EditorPage() {
   const [files, setFiles] =
     useState<File[]>([]);
 
+
   const [
     fileErrorMessage,
     setFileErrorMessage,
@@ -464,6 +465,7 @@ export default function EditorPage() {
       hasError = true;
     }
 
+
     if (
       hasError ||
       !selectedTag ||
@@ -488,6 +490,7 @@ export default function EditorPage() {
           post_type: selectedTag,
           title: title.trim(),
           content: body,
+          price: 1,
           is_published: true,
         })
         .select("id")
