@@ -4,14 +4,13 @@ export type TagType =
   | "reference"
   | "study_trail";
 
-const TAG_CONFIG: Record<
-  TagType,
-  {
-    label: string;
-    bg: string;
-    color: string;
-  }
-> = {
+type TagConfig = {
+  label: string;
+  bg: string;
+  color: string;
+};
+
+const TAG_CONFIG: Record<TagType, TagConfig> = {
   notes: {
     label: "Notes",
     bg: "var(--cs-notes-bg)",
@@ -34,6 +33,12 @@ const TAG_CONFIG: Record<
   },
 };
 
+const FALLBACK_CONFIG: TagConfig = {
+  label: "Notes",
+  bg: "var(--cs-notes-bg)",
+  color: "var(--cs-notes-fg)",
+};
+
 type TagChipProps = {
   tag: TagType;
   size?: "sm" | "md";
@@ -43,7 +48,7 @@ export default function TagChip({
   tag,
   size = "sm",
 }: TagChipProps) {
-  const cfg = TAG_CONFIG[tag];
+  const cfg = TAG_CONFIG[tag] ?? FALLBACK_CONFIG;
 
   return (
     <span
@@ -54,11 +59,8 @@ export default function TagChip({
         fontSize: size === "md" ? 12 : 11,
         fontWeight: 500,
         padding:
-          size === "md"
-            ? "3px 8px"
-            : "2.5px 7px",
-        borderRadius:
-          "var(--cs-radius-xs)",
+          size === "md" ? "3px 8px" : "2.5px 7px",
+        borderRadius: "var(--cs-radius-xs)",
         whiteSpace: "nowrap",
         flexShrink: 0,
       }}

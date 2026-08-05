@@ -1,86 +1,92 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import TagChip, { TagType } from "@/components/common/TagChip";
 import { supabase } from "@/lib/supabase";
-import styles from "./page.module.css";
 
-type PostType =
-  | "notes"
-  | "exam"
-  | "reference"
-  | "study_trail";
-
-type SubjectRelation = {
-  name: string;
+type BookmarkDoc = {
+  id: string;
+  title: string;
+  tag: TagType;
+  author: string;
+  timeAgo: string;
+  subjectName: string;
+  courseOfferingId: string;
 };
 
-type ProfessorRelation = {
-  name: string;
-};
-
-type CourseOfferingRelation = {
+type CourseRelation = {
+  id: string;
   subjects:
-    | SubjectRelation
-    | SubjectRelation[]
-    | null;
-  professors:
-    | ProfessorRelation
-    | ProfessorRelation[]
+    | { name: string }
+    | { name: string }[]
     | null;
 };
 
 type PostRelation = {
   id: string;
   title: string;
-  post_type: PostType;
+  post_type: TagType;
   created_at: string;
+  course_offering_id: string;
+  profiles:
+    | { nickname: string | null }
+    | { nickname: string | null }[]
+    | null;
   course_offerings:
-    | CourseOfferingRelation
-    | CourseOfferingRelation[]
+    | CourseRelation
+    | CourseRelation[]
     | null;
 };
 
 type BookmarkRow = {
   id: string;
-  post_id: string;
   created_at: string;
-  posts:
-    | PostRelation
-    | PostRelation[]
-    | null;
+  posts: PostRelation | PostRelation[] | null;
 };
 
-type BookmarkItem = {
-  bookmarkId: string;
-  postId: string;
-  title: string;
-  postType: PostType;
-  postCreatedAt: string;
-  subjectName: string;
-  professorName: string;
-};
+function pickOne<T>(value: T | T[] | null): T | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
 
-const TYPE_LABELS: Record<PostType, string> = {
-  notes: "Notes",
-  exam: "Exam",
-  reference: "Reference",
-  study_trail: "Study Trail",
-};
+  return value;
+}
 
-export default function BookmarksPage() {
+function formatRelativeDate(dateString: string) {
+  const createdAt = new Date(dateString);
+  const now = new Date();
+
+  const difference = Math.max(
+    0,
+    now.getTime() - createdAt.getTime(),
+  );
+
+  const minutes = Math.floor(difference / (1000 * 60));
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (minutes < 1) return "방금 전";
+  if (minutes < 60) return `${minutes}분 전`;
+  if (hours < 24) return `${hours}시간 전`;
+  if (days < 7) return `${days}일 전`;
+
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+    .format(createdAt)
+    .replace(/\.$/, "");
+}
+
+export default function BookmarkPage() {
   const router = useRouter();
 
-  const [bookmarks, setBookmarks] =
-    useState<BookmarkItem[]>([]);
-  const [isLoading, setIsLoading] =
-    useState(true);
-  const [removingBookmarkId, setRemovingBookmarkId] =
-    useState<string | null>(null);
-  const [errorMessage, setErrorMessage] =
-    useState("");
+  const [bookmarked, setBookmarked] = useState<BookmarkDoc[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     const loadBookmarks = async () => {
@@ -89,15 +95,10 @@ export default function BookmarksPage() {
         setErrorMessage("");
 
         const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
+          data: { session },
+        } = await supabase.auth.getSession();
 
-        if (userError) {
-          throw userError;
-        }
-
-        if (!user) {
+        if (!session?.user) {
           router.replace("/login");
           return;
         }
@@ -106,90 +107,72 @@ export default function BookmarksPage() {
           .from("bookmarks")
           .select(`
             id,
-            post_id,
             created_at,
             posts (
               id,
               title,
               post_type,
               created_at,
+              course_offering_id,
+              profiles:author_id (
+                nickname
+              ),
               course_offerings (
-                subjects ( name ),
-                professors ( name )
+                id,
+                subjects (
+                  name
+                )
               )
             )
           `)
-          .eq("user_id", user.id)
-          .order("created_at", {
-            ascending: false,
-          });
+          .eq("user_id", session.user.id)
+          .order("created_at", { ascending: false });
 
         if (error) {
           throw error;
         }
 
-        const rows =
-          (data ?? []) as unknown as BookmarkRow[];
+        const rows = (data ?? []) as unknown as BookmarkRow[];
 
-        const nextBookmarks = rows
-          .map((row): BookmarkItem | null => {
-            const post = Array.isArray(row.posts)
-              ? row.posts[0]
-              : row.posts;
+        setBookmarked(
+          rows
+            .map((row): BookmarkDoc | null => {
+              const post = pickOne(row.posts);
 
-            if (!post) {
-              return null;
-            }
+              if (!post) {
+                return null;
+              }
 
-            const course = Array.isArray(
-              post.course_offerings,
-            )
-              ? post.course_offerings[0]
-              : post.course_offerings;
+              const profile = pickOne(post.profiles);
+              const course = pickOne(post.course_offerings);
+              const subject = course
+                ? pickOne(course.subjects)
+                : null;
 
-            const subject = Array.isArray(
-              course?.subjects,
-            )
-              ? course?.subjects[0]
-              : course?.subjects;
-
-            const professor = Array.isArray(
-              course?.professors,
-            )
-              ? course?.professors[0]
-              : course?.professors;
-
-            return {
-              bookmarkId: row.id,
-              postId: post.id,
-              title: post.title,
-              postType: post.post_type,
-              postCreatedAt: post.created_at,
-              subjectName:
-                subject?.name ?? "과목명 없음",
-              professorName:
-                professor?.name ?? "교수 미정",
-            };
-          })
-          .filter(
-            (
-              item,
-            ): item is BookmarkItem =>
-              item !== null,
-          );
-
-        setBookmarks(nextBookmarks);
-      } catch (error) {
-        console.error(
-          "북마크 목록 조회 실패:",
-          error,
+              return {
+                id: post.id,
+                title: post.title,
+                tag: post.post_type,
+                author: profile?.nickname ?? "익명",
+                timeAgo: formatRelativeDate(post.created_at),
+                subjectName: subject?.name ?? "",
+                courseOfferingId: post.course_offering_id,
+              };
+            })
+            .filter(
+              (doc): doc is BookmarkDoc => doc !== null,
+            ),
         );
+      } catch (error) {
+        console.error("북마크 조회 실패:", error);
 
         setErrorMessage(
           error instanceof Error
             ? error.message
-            : "북마크 목록을 불러오지 못했습니다.",
+            : "북마크를 불러오지 못했습니다.",
         );
+
+        setBookmarked([]);
       } finally {
         setIsLoading(false);
       }
@@ -198,215 +181,56 @@ export default function BookmarksPage() {
     void loadBookmarks();
   }, [router]);
 
-  const handleRemoveBookmark = async (
-    bookmark: BookmarkItem,
-  ) => {
-    if (removingBookmarkId) {
-      return;
-    }
-
-    try {
-      setRemovingBookmarkId(
-        bookmark.bookmarkId,
-      );
-
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError) {
-        throw userError;
-      }
-
-      if (!user) {
-        router.replace("/login");
-        return;
-      }
-
-      const { error } = await supabase
-        .from("bookmarks")
-        .delete()
-        .eq("id", bookmark.bookmarkId)
-        .eq("user_id", user.id);
-
-      if (error) {
-        throw error;
-      }
-
-      setBookmarks((previous) =>
-        previous.filter(
-          (item) =>
-            item.bookmarkId !==
-            bookmark.bookmarkId,
-        ),
-      );
-    } catch (error) {
-      console.error(
-        "북마크 해제 실패:",
-        error,
-      );
-
-      alert(
-        error instanceof Error
-          ? error.message
-          : "북마크를 해제하지 못했습니다.",
-      );
-    } finally {
-      setRemovingBookmarkId(null);
-    }
-  };
-
   return (
-    <main className={styles.page}>
-      <section className={styles.content}>
-        <header className={styles.pageHeader}>
-          <h1>
-            북마크
-            <span>{bookmarks.length}개</span>
-          </h1>
-        </header>
+    <div style={{ height: '100%', overflowY: 'auto', background: 'var(--cs-surface)' }}>
+      <div style={{ padding: '24px 32px 60px', maxWidth: 780, margin: '0 auto' }}>
+
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 24 }}>
+          <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0, letterSpacing: '-0.02em', color: 'var(--cs-ink)' }}>북마크</h1>
+          <span style={{ fontSize: 13, color: 'var(--cs-ink-faint)' }}>{bookmarked.length}개</span>
+        </div>
 
         {isLoading ? (
-          <div className={styles.stateBox}>
-            북마크를 불러오는 중입니다.
+          <div style={{ paddingTop: 60, textAlign: 'center', color: 'var(--cs-ink-faint)', fontSize: 13.5 }}>
+            불러오는 중이에요
           </div>
         ) : errorMessage ? (
-          <div className={styles.stateBox}>
+          <div style={{ paddingTop: 60, textAlign: 'center', color: 'var(--cs-error)', fontSize: 13.5 }}>
             {errorMessage}
           </div>
-        ) : bookmarks.length === 0 ? (
-          <div className={styles.emptyState}>
-            <span className={styles.emptyStar}>
-              ☆
-            </span>
-
-            <strong>
-              저장한 북마크가 없습니다.
-            </strong>
-
-            <p>
-              다시 보고 싶은 노트를 북마크해
-              보세요.
-            </p>
-
-            <Link href="/">
-              노트 둘러보기
-            </Link>
+        ) : bookmarked.length === 0 ? (
+          <div style={{ paddingTop: 60, textAlign: 'center', color: 'var(--cs-ink-faint)', fontSize: 13.5 }}>
+            북마크한 노트가 없어요
           </div>
         ) : (
-          <ul className={styles.bookmarkList}>
-            {bookmarks.map((bookmark) => {
-              const isRemoving =
-                removingBookmarkId ===
-                bookmark.bookmarkId;
-
-              return (
-                <li
-                  key={bookmark.bookmarkId}
-                  className={styles.bookmarkRow}
-                >
-                  <Link
-                    href={`/posts/${bookmark.postId}`}
-                    className={styles.postLink}
-                  >
-                    <span
-                      className={`${styles.typeBadge} ${
-                        styles[
-                          `type_${bookmark.postType}`
-                        ]
-                      }`}
-                    >
-                      {
-                        TYPE_LABELS[
-                          bookmark.postType
-                        ]
-                      }
-                    </span>
-
-                    <div
-                      className={styles.postInformation}
-                    >
-                      <strong>
-                        {bookmark.title}
-                      </strong>
-
-                      <span>
-                        {bookmark.subjectName}
-                        {" · "}
-                        {bookmark.professorName}
-                        {" · "}
-                        {formatRelativeDate(
-                          bookmark.postCreatedAt,
-                        )}
-                      </span>
-                    </div>
-                  </Link>
-
-                  <button
-                    type="button"
-                    className={styles.removeButton}
-                    onClick={() =>
-                      void handleRemoveBookmark(
-                        bookmark,
-                      )
-                    }
-                    disabled={isRemoving}
-                    aria-label={`${bookmark.title} 북마크 해제`}
-                    title="북마크 해제"
-                  >
-                    {isRemoving ? "…" : "★"}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          <div style={{ borderTop: '1px solid var(--cs-border)' }}>
+            {bookmarked.map(doc => (
+              <div
+                key={doc.id}
+                onClick={() => router.push(`/posts/${doc.id}`)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '13px 4px', borderBottom: '1px solid var(--cs-border)',
+                  cursor: 'pointer', transition: 'background 0.1s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--cs-hover-row)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              >
+                <TagChip tag={doc.tag} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, color: 'var(--cs-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {doc.title}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--cs-ink-faint)', marginTop: 3 }}>
+                    {doc.subjectName} · {doc.author} · {doc.timeAgo}
+                  </div>
+                </div>
+                <span style={{ fontSize: 13, color: 'var(--cs-purple-dark)' }}>★</span>
+              </div>
+            ))}
+          </div>
         )}
-      </section>
-    </main>
-  );
-}
-
-function formatRelativeDate(
-  dateString: string,
-) {
-  const createdAt = new Date(dateString);
-  const now = new Date();
-
-  const difference = Math.max(
-    0,
-    now.getTime() -
-      createdAt.getTime(),
-  );
-
-  const minutes = Math.floor(
-    difference / (1000 * 60),
-  );
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-
-  if (minutes < 1) {
-    return "방금 전";
-  }
-
-  if (minutes < 60) {
-    return `${minutes}분 전`;
-  }
-
-  if (hours < 24) {
-    return `${hours}시간 전`;
-  }
-
-  if (days < 7) {
-    return `${days}일 전`;
-  }
-
-  return new Intl.DateTimeFormat(
-    "ko-KR",
-    {
-      year: "numeric",
-      month: "numeric",
-      day: "numeric",
-    },
-  ).format(createdAt);
+      </div>
+    </div>
+  )
 }
