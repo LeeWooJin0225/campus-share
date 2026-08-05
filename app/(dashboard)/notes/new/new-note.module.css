@@ -178,23 +178,124 @@
   background: #e9e7e2;
 }
 
-.contentSection textarea {
+.contentSection :global(.ProseMirror) {
   display: block;
   width: 100%;
   min-height: 350px;
-  resize: vertical;
   padding: 22px;
   border: 0;
   outline: none;
   background: #ffffff;
   color: #403d37;
+  font-family: inherit;
   font-size: 13px;
   line-height: 1.8;
   box-sizing: border-box;
+  overflow-wrap: anywhere;
 }
 
-.contentSection textarea::placeholder {
+.contentSection :global(.ProseMirror p) {
+  margin: 0 0 12px;
+}
+
+.contentSection :global(.ProseMirror h2) {
+  margin: 24px 0 12px;
+  color: #38352f;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.contentSection :global(.ProseMirror h3) {
+  margin: 20px 0 10px;
+  color: #4e4a44;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+/* 글머리표 목록 */
+.contentSection :global(.ProseMirror ul) {
+  margin: 10px 0 14px;
+  padding-left: 25px;
+  list-style: disc outside !important;
+}
+
+/* 번호 목록 */
+.contentSection :global(.ProseMirror ol) {
+  margin: 10px 0 14px;
+  padding-left: 27px;
+  list-style: decimal outside !important;
+}
+
+.contentSection :global(.ProseMirror li) {
+  display: list-item !important;
+  margin: 4px 0;
+  padding-left: 2px;
+}
+
+.contentSection :global(.ProseMirror li::marker) {
+  color: #7164c9;
+  font-weight: 700;
+}
+
+.contentSection :global(.ProseMirror li p) {
+  margin: 0;
+}
+
+.contentSection :global(.ProseMirror blockquote) {
+  margin: 17px 0;
+  padding: 10px 14px;
+  border-left: 3px solid #8172d9;
+  border-radius: 0 6px 6px 0;
+  background: #f5f2ff;
+  color: #625e68;
+}
+
+.contentSection :global(.ProseMirror blockquote p) {
+  margin: 0;
+}
+
+.contentSection :global(.ProseMirror pre) {
+  margin: 17px 0;
+  padding: 14px 16px;
+  overflow-x: auto;
+  border: 1px solid #e4e1dc;
+  border-radius: 7px;
+  background: #f7f6f3;
+  color: #403d37;
+  font-family:
+    Consolas,
+    "Courier New",
+    monospace;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.contentSection :global(.ProseMirror code) {
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #f1efeb;
+  color: #6557b5;
+  font-family:
+    Consolas,
+    "Courier New",
+    monospace;
+  font-size: 0.92em;
+}
+
+.contentSection :global(.ProseMirror pre code) {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.contentSection :global(.ProseMirror p.is-editor-empty:first-child::before) {
+  content: "여기에 내용을 입력하세요";
+  height: 0;
+  float: left;
   color: #aaa69e;
+  pointer-events: none;
 }
 
 .editorFooter {
