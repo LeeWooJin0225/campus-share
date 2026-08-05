@@ -85,6 +85,17 @@ type ExistingAttachment = {
 const MAX_FILE_COUNT = 5;
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 
+const ACCEPTED_EXTENSIONS = new Set([
+  "pdf",
+  "png",
+  "jpg",
+  "jpeg",
+  "doc",
+  "docx",
+  "ppt",
+  "pptx",
+]);
+
 export default function EditPostPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -117,6 +128,10 @@ export default function EditPostPage() {
     useState(false);
   const [errorMessage, setErrorMessage] =
     useState("");
+  const [
+    fileErrorMessage,
+    setFileErrorMessage,
+  ] = useState("");
 
   useEffect(() => {
     const loadEditPage = async () => {
@@ -323,7 +338,24 @@ export default function EditPostPage() {
       event.target.files ?? [],
     );
 
+    event.target.value = "";
+    setFileErrorMessage("");
+
     if (selectedFiles.length === 0) {
+      return;
+    }
+
+    const currentCount =
+      existingAttachments.length +
+      newFiles.length;
+
+    const remainingCount =
+      MAX_FILE_COUNT - currentCount;
+
+    if (remainingCount <= 0) {
+      setFileErrorMessage(
+        `첨부파일은 최대 ${MAX_FILE_COUNT}개까지 등록할 수 있습니다.`,
+      );
       return;
     }
 
@@ -332,50 +364,63 @@ export default function EditPostPage() {
     );
 
     if (oversizedFile) {
-      alert(
+      setFileErrorMessage(
         `${oversizedFile.name} 파일은 20MB를 초과합니다.`,
       );
-      event.target.value = "";
       return;
     }
 
-    const filteredFiles = selectedFiles.filter(
-      (selectedFile) =>
-        !newFiles.some(
-          (existingFile) =>
-            existingFile.name ===
-              selectedFile.name &&
-            existingFile.size ===
-              selectedFile.size &&
-            existingFile.lastModified ===
-              selectedFile.lastModified,
+    const unsupportedFile =
+      selectedFiles.find(
+        (file) =>
+          !ACCEPTED_EXTENSIONS.has(
+            getFileExtension(file.name),
+          ),
+      );
+
+    if (unsupportedFile) {
+      setFileErrorMessage(
+        `${unsupportedFile.name} 파일 형식은 등록할 수 없습니다.`,
+      );
+      return;
+    }
+
+    const existingKeys = new Set(
+      newFiles.map(
+        (file) =>
+          `${file.name}-${file.size}-${file.lastModified}`,
+      ),
+    );
+
+    const uniqueFiles = selectedFiles.filter(
+      (file) =>
+        !existingKeys.has(
+          `${file.name}-${file.size}-${file.lastModified}`,
         ),
     );
 
-    if (
-      existingAttachments.length +
-        newFiles.length +
-        filteredFiles.length >
-      MAX_FILE_COUNT
-    ) {
-      alert(
-        `첨부파일은 최대 ${MAX_FILE_COUNT}개까지 등록할 수 있습니다.`,
+    const filesToAdd = uniqueFiles.slice(
+      0,
+      remainingCount,
+    );
+
+    if (uniqueFiles.length > remainingCount) {
+      setFileErrorMessage(
+        `첨부파일은 최대 ${MAX_FILE_COUNT}개까지 등록할 수 있어 가능한 파일만 추가했습니다.`,
       );
-      event.target.value = "";
-      return;
     }
 
     setNewFiles((previous) => [
       ...previous,
-      ...filteredFiles,
+      ...filesToAdd,
     ]);
-
-    event.target.value = "";
   };
 
   const handleRemoveExistingAttachment = (
     attachment: ExistingAttachment,
   ) => {
+    setFileErrorMessage("");
+
     setExistingAttachments((previous) =>
       previous.filter(
         (item) => item.id !== attachment.id,
@@ -391,6 +436,8 @@ export default function EditPostPage() {
   const handleRemoveNewFile = (
     fileIndex: number,
   ) => {
+    setFileErrorMessage("");
+
     setNewFiles((previous) =>
       previous.filter(
         (_, index) => index !== fileIndex,
@@ -413,16 +460,14 @@ export default function EditPostPage() {
       return;
     }
 
-    if (
-      !content.trim() ||
-      content.trim() === "<p></p>"
-    ) {
+    if (!getPlainTextFromHtml(content)) {
       alert("내용을 입력해주세요.");
       return;
     }
 
     try {
       setIsSubmitting(true);
+      setFileErrorMessage("");
 
       const {
         data: { user },
@@ -439,27 +484,102 @@ export default function EditPostPage() {
       }
 
       const uploadedPaths: string[] = [];
-
-      const { error: postUpdateError } =
-        await supabase
-          .from("posts")
-          .update({
-            course_offering_id:
-              courseOfferingId,
-            post_type: postType,
-            title: title.trim(),
-            content: content.trim(),
-            updated_at:
-              new Date().toISOString(),
-          })
-          .eq("id", postId)
-          .eq("author_id", user.id);
-
-      if (postUpdateError) {
-        throw postUpdateError;
-      }
+      const insertedAttachmentIds: string[] = [];
 
       try {
+        const attachmentRows: {
+          post_id: string;
+          uploader_id: string;
+          original_name: string;
+          storage_path: string;
+          mime_type: string;
+          size_bytes: number;
+          display_order: number;
+        }[] = [];
+
+        for (
+          let index = 0;
+          index < newFiles.length;
+          index += 1
+        ) {
+          const file = newFiles[index];
+          const extension =
+            getFileExtension(file.name);
+
+          const storagePath =
+            `${user.id}/${postId}/${crypto.randomUUID()}.${extension}`;
+
+          const { error: uploadError } =
+            await supabase.storage
+              .from("post-files")
+              .upload(storagePath, file, {
+                contentType:
+                  file.type ||
+                  "application/octet-stream",
+                cacheControl: "3600",
+                upsert: false,
+              });
+
+          if (uploadError) {
+            throw uploadError;
+          }
+
+          uploadedPaths.push(storagePath);
+
+          attachmentRows.push({
+            post_id: postId,
+            uploader_id: user.id,
+            original_name: file.name,
+            storage_path: storagePath,
+            mime_type:
+              file.type ||
+              "application/octet-stream",
+            size_bytes: file.size,
+            display_order:
+              existingAttachments.length +
+              index,
+          });
+        }
+
+        if (attachmentRows.length > 0) {
+          const {
+            data: insertedRows,
+            error: insertError,
+          } = await supabase
+            .from("post_attachments")
+            .insert(attachmentRows)
+            .select("id");
+
+          if (insertError) {
+            throw insertError;
+          }
+
+          insertedAttachmentIds.push(
+            ...((insertedRows ?? []) as {
+              id: string;
+            }[]).map((row) => row.id),
+          );
+        }
+
+        const { error: postUpdateError } =
+          await supabase
+            .from("posts")
+            .update({
+              course_offering_id:
+                courseOfferingId,
+              post_type: postType,
+              title: title.trim(),
+              content: content.trim(),
+              updated_at:
+                new Date().toISOString(),
+            })
+            .eq("id", postId)
+            .eq("author_id", user.id);
+
+        if (postUpdateError) {
+          throw postUpdateError;
+        }
+
         if (removedAttachments.length > 0) {
           const removedIds =
             removedAttachments.map(
@@ -495,85 +615,21 @@ export default function EditPostPage() {
             );
           }
         }
-
-        const attachmentRows: {
-          post_id: string;
-          uploader_id: string;
-          original_name: string;
-          storage_path: string;
-          mime_type: string;
-          size_bytes: number;
-          display_order: number;
-        }[] = [];
-
-        for (
-          let index = 0;
-          index < newFiles.length;
-          index += 1
-        ) {
-          const file = newFiles[index];
-
-          const extension =
-            file.name
-              .split(".")
-              .pop()
-              ?.toLowerCase() ?? "file";
-
-          const storageFileName =
-            `${crypto.randomUUID()}.${extension}`;
-
-          const storagePath =
-            `${user.id}/${postId}/${storageFileName}`;
-
-          const { error: uploadError } =
-            await supabase.storage
-              .from("post-files")
-              .upload(storagePath, file, {
-                contentType:
-                  file.type ||
-                  "application/octet-stream",
-                upsert: false,
-              });
-
-          if (uploadError) {
-            throw uploadError;
-          }
-
-          uploadedPaths.push(storagePath);
-
-          attachmentRows.push({
-            post_id: postId,
-            uploader_id: user.id,
-            original_name: file.name,
-            storage_path: storagePath,
-            mime_type:
-              file.type ||
-              "application/octet-stream",
-            size_bytes: file.size,
-            display_order:
-              existingAttachments.length +
-              index,
-          });
+      } catch (updateError) {
+        if (insertedAttachmentIds.length > 0) {
+          await supabase
+            .from("post_attachments")
+            .delete()
+            .in("id", insertedAttachmentIds);
         }
 
-        if (attachmentRows.length > 0) {
-          const { error: insertError } =
-            await supabase
-              .from("post_attachments")
-              .insert(attachmentRows);
-
-          if (insertError) {
-            throw insertError;
-          }
-        }
-      } catch (attachmentError) {
         if (uploadedPaths.length > 0) {
           await supabase.storage
             .from("post-files")
             .remove(uploadedPaths);
         }
 
-        throw attachmentError;
+        throw updateError;
       }
 
       alert("게시글이 수정되었습니다.");
@@ -747,16 +803,6 @@ export default function EditPostPage() {
             disabled={isSubmitting}
           />
 
-          <footer
-            className={styles.editorFooter}
-          >
-            <span>
-              제목, 굵게, 목록 등의 서식을
-              사용할 수 있습니다.
-            </span>
-
-            <span>{content.length}자</span>
-          </footer>
         </section>
 
         <section
@@ -777,8 +823,8 @@ export default function EditPostPage() {
                   styles.attachmentDescription
                 }
               >
-                기존 파일을 삭제하거나 새 파일을
-                추가할 수 있습니다.
+                PDF, 이미지, Word, PowerPoint 파일을
+                파일당 최대 20MB까지 등록할 수 있습니다.
               </p>
             </div>
 
@@ -794,8 +840,9 @@ export default function EditPostPage() {
             type="file"
             multiple
             className={styles.hiddenFileInput}
-            accept=".pdf,.ppt,.pptx,.doc,.docx,.hwp,.hwpx,.txt,.zip,.png,.jpg,.jpeg"
+            accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.ppt,.pptx"
             onChange={handleFileChange}
+            disabled={isSubmitting}
           />
 
           <button
@@ -805,9 +852,10 @@ export default function EditPostPage() {
               fileInputRef.current?.click()
             }
             disabled={
+              isSubmitting ||
               existingAttachments.length +
                 newFiles.length >=
-              MAX_FILE_COUNT
+                MAX_FILE_COUNT
             }
           >
             <span className={styles.uploadIcon}>
@@ -822,6 +870,19 @@ export default function EditPostPage() {
               파일당 최대 20MB · 최대 5개
             </small>
           </button>
+
+          {fileErrorMessage && (
+            <p
+              style={{
+                margin: "10px 0 0",
+                color: "var(--cs-error)",
+                fontSize: 11,
+                lineHeight: 1.5,
+              }}
+            >
+              {fileErrorMessage}
+            </p>
+          )}
 
           {(existingAttachments.length > 0 ||
             newFiles.length > 0) && (
@@ -887,6 +948,7 @@ export default function EditPostPage() {
                         )
                       }
                       aria-label={`${attachment.original_name} 삭제`}
+                      disabled={isSubmitting}
                     >
                       ×
                     </button>
@@ -947,6 +1009,7 @@ export default function EditPostPage() {
                       handleRemoveNewFile(index)
                     }
                     aria-label={`${file.name} 삭제`}
+                    disabled={isSubmitting}
                   >
                     ×
                   </button>
@@ -988,6 +1051,37 @@ function TypeButton({
   );
 }
 
+
+
+function getPlainTextFromHtml(
+  html: string,
+) {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  const element =
+    document.createElement("div");
+
+  element.innerHTML = html;
+
+  return (
+    element.textContent ??
+    element.innerText ??
+    ""
+  ).trim();
+}
+
+function getFileExtension(
+  fileName: string,
+) {
+  return (
+    fileName
+      .split(".")
+      .pop()
+      ?.toLowerCase() ?? ""
+  );
+}
 
 function formatFileSize(size: number) {
   if (size < 1024) {
