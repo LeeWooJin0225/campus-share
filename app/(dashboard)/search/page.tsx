@@ -6,7 +6,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type Offering = {
+  /* 대표 분반 id (담기/이동에 사용) */
   id: string;
+  /* 같은 과목+교수인 모든 분반 id */
+  offeringIds: string[];
   name: string;
   professor: string;
   dept: string;
@@ -16,13 +19,14 @@ type Offering = {
 
 type OfferingRow = {
   id: string;
+  subject_id: string;
   subjects:
-    | { name: string; department: string | null }
-    | { name: string; department: string | null }[]
+    | { id: string; name: string; department: string | null }
+    | { id: string; name: string; department: string | null }[]
     | null;
   professors:
-    | { name: string }
-    | { name: string }[]
+    | { id: string; name: string }
+    | { id: string; name: string }[]
     | null;
 };
 
@@ -37,9 +41,6 @@ const DEPT_ORDER = [
 
 const NO_DEPT_LABEL = "기타";
 
-/* ──────────────────────────────────────────────
- * (A) 노트 개수 연결 지점
- * ────────────────────────────────────────────── */
 const NOTE_COUNTS_ENABLED = true;
 
 async function fetchNoteCounts(
@@ -86,7 +87,7 @@ export default function SearchPage() {
 
   const [dept, setDept] = useState("전체");
   const [offerings, setOfferings] = useState<Offering[]>([]);
-  const [myCourseIds, setMyCourseIds] = useState<Set<string>>(
+  const [addedIds, setAddedIds] = useState<Set<string>>(
     new Set(),
   );
   const [userId, setUserId] = useState("");
@@ -121,11 +122,14 @@ export default function SearchPage() {
           .from("course_offerings")
           .select(`
             id,
+            subject_id,
             subjects (
+              id,
               name,
               department
             ),
             professors (
+              id,
               name
             )
           `);
@@ -140,24 +144,39 @@ export default function SearchPage() {
           rows.map((row) => row.id),
         );
 
-        setOfferings(
-          rows.map((row): Offering => {
-            const subject = pickOne(row.subjects);
-            const professor = pickOne(row.professors);
-            const docCount = counts[row.id] ?? 0;
+        /* 과목 + 교수 기준으로 합치기 (같은 교수 다른 분반은 한 줄) */
+        const groupMap = new Map<string, Offering>();
 
-            return {
-              id: row.id,
-              name: subject?.name ?? "이름 없음",
-              professor: professor?.name ?? "교수 미정",
-              dept: subject?.department ?? NO_DEPT_LABEL,
-              docCount,
-              empty: docCount === 0,
-            };
-          }),
-        );
+        rows.forEach((row) => {
+          const subject = pickOne(row.subjects);
+          const professor = pickOne(row.professors);
 
-        /* 내가 담은 과목 */
+          const key = `${row.subject_id}__${professor?.id ?? "unknown"}`;
+          const docCount = counts[row.id] ?? 0;
+
+          const existing = groupMap.get(key);
+
+          if (existing) {
+            existing.offeringIds.push(row.id);
+            existing.docCount += docCount;
+            existing.empty = existing.docCount === 0;
+            return;
+          }
+
+          groupMap.set(key, {
+            id: row.id,
+            offeringIds: [row.id],
+            name: subject?.name ?? "이름 없음",
+            professor: professor?.name ?? "교수 미정",
+            dept: subject?.department ?? NO_DEPT_LABEL,
+            docCount,
+            empty: docCount === 0,
+          });
+        });
+
+        setOfferings(Array.from(groupMap.values()));
+
+        /* 내가 담은 분반 */
         const { data: myData, error: myError } = await supabase
           .from("user_course_offerings")
           .select("course_offering_id")
@@ -170,7 +189,7 @@ export default function SearchPage() {
             course_offering_id: string;
           }[];
 
-          setMyCourseIds(
+          setAddedIds(
             new Set(ids.map((r) => r.course_offering_id)),
           );
         }
@@ -192,43 +211,51 @@ export default function SearchPage() {
     void loadOfferings();
   }, [router]);
 
-  const toggleMyCourse = async (offeringId: string) => {
+  /* 묶음 안의 분반 중 하나라도 담겨 있으면 담긴 것으로 표시 */
+  const isGroupAdded = (offering: Offering) =>
+    offering.offeringIds.some((id) => addedIds.has(id));
+
+  const toggleMyCourse = async (offering: Offering) => {
     if (!userId || pendingId) return;
 
-    setPendingId(offeringId);
+    setPendingId(offering.id);
 
-    const isAdded = myCourseIds.has(offeringId);
+    const addedOne = offering.offeringIds.find((id) =>
+      addedIds.has(id),
+    );
 
-    if (isAdded) {
+    if (addedOne) {
+      /* 묶음 안에 담긴 것 전부 제거 */
       const { error } = await supabase
         .from("user_course_offerings")
         .delete()
         .eq("user_id", userId)
-        .eq("course_offering_id", offeringId);
+        .in("course_offering_id", offering.offeringIds);
 
       if (error) {
         console.error("내 과목 빼기 실패:", error);
       } else {
-        setMyCourseIds((prev) => {
+        setAddedIds((prev) => {
           const next = new Set(prev);
-          next.delete(offeringId);
+          offering.offeringIds.forEach((id) => next.delete(id));
           return next;
         });
       }
     } else {
+      /* 대표 분반 하나만 담기 */
       const { error } = await supabase
         .from("user_course_offerings")
         .insert({
           user_id: userId,
-          course_offering_id: offeringId,
+          course_offering_id: offering.id,
         });
 
       if (error) {
         console.error("내 과목 담기 실패:", error);
       } else {
-        setMyCourseIds((prev) => {
+        setAddedIds((prev) => {
           const next = new Set(prev);
-          next.add(offeringId);
+          next.add(offering.id);
           return next;
         });
       }
@@ -237,7 +264,6 @@ export default function SearchPage() {
     setPendingId("");
   };
 
-  /* DB 에 존재하는 학과만 뽑아 Figma 순서 우선으로 정렬 */
   const depts = useMemo(() => {
     const found = new Set<string>();
 
@@ -322,7 +348,6 @@ export default function SearchPage() {
           <div>
             {groups.map(group => (
               <div key={group.dept} style={{ marginBottom: 28 }}>
-                {/* Dept header — only show when not filtered to a single dept */}
                 {(dept === '전체' || groups.length > 1) && (
                   <div style={{
                     fontSize: 12.5, fontWeight: 600, color: 'var(--cs-ink-soft)',
@@ -337,10 +362,9 @@ export default function SearchPage() {
                   </div>
                 )}
 
-                {/* Subject rows */}
                 <div>
                   {group.subjects.map(s => {
-                    const isAdded = myCourseIds.has(s.id)
+                    const isAdded = isGroupAdded(s)
                     const isPending = pendingId === s.id
 
                     return (
@@ -358,30 +382,25 @@ export default function SearchPage() {
                         onMouseEnter={e => (e.currentTarget.style.background = 'var(--cs-card-bg)')}
                         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       >
-                        {/* Subject dot */}
                         <div style={{
                           width: 8, height: 8, borderRadius: 'var(--cs-radius-full)', flexShrink: 0,
                           background: s.empty ? 'var(--cs-border-str)' : 'var(--cs-purple)',
                         }} />
 
-                        {/* Name */}
                         <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--cs-ink)', flex: '0 0 160px' }}>
                           {s.name}
                         </span>
 
-                        {/* Professor */}
                         <span style={{ fontSize: 13, color: 'var(--cs-ink-soft)', flex: 1 }}>
                           이번 학기 {s.professor} 교수님
                         </span>
 
-                        {/* Note count */}
                         <span style={{ fontSize: 12.5, color: 'var(--cs-ink-faint)', flexShrink: 0, marginRight: 8 }}>
                           {s.empty ? '노트 없음' : `노트 ${s.docCount}개`}
                         </span>
 
-                        {/* 내 과목 추가 */}
                         <button
-                          onClick={e => { e.stopPropagation(); void toggleMyCourse(s.id) }}
+                          onClick={e => { e.stopPropagation(); void toggleMyCourse(s) }}
                           disabled={isPending}
                           style={{
                             fontSize: 11.5, padding: '3px 9px', borderRadius: 'var(--cs-radius-sm)',

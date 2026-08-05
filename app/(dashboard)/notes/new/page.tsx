@@ -22,13 +22,20 @@ type TagType =
 type SubjectOption = {
   id: string;
   name: string;
+  professor: string;
+  /* 같은 과목+같은 교수인 다른 분반들의 id (표시용으로는 안 씀) */
+  siblingIds: string[];
 };
 
 type CourseRelation = {
   id: string;
   subjects:
-    | { name: string }
-    | { name: string }[]
+    | { id: string; name: string }
+    | { id: string; name: string }[]
+    | null;
+  professors:
+    | { id: string; name: string }
+    | { id: string; name: string }[]
     | null;
 };
 
@@ -66,27 +73,13 @@ const TAG_OPTIONS: {
   key: TagType;
   label: string;
 }[] = [
-  {
-    key: "notes",
-    label: "Notes",
-  },
-  {
-    key: "exam",
-    label: "Exam",
-  },
-  {
-    key: "reference",
-    label: "Reference",
-  },
-  {
-    key: "study_trail",
-    label: "Study Trail",
-  },
+  { key: "notes", label: "Notes" },
+  { key: "exam", label: "Exam" },
+  { key: "reference", label: "Reference" },
+  { key: "study_trail", label: "Study Trail" },
 ];
 
-function pickOne<T>(
-  value: T | T[] | null,
-): T | null {
+function pickOne<T>(value: T | T[] | null): T | null {
   if (Array.isArray(value)) {
     return value[0] ?? null;
   }
@@ -94,15 +87,12 @@ function pickOne<T>(
   return value;
 }
 
-function getPlainTextFromHtml(
-  html: string,
-) {
+function getPlainTextFromHtml(html: string) {
   if (typeof window === "undefined") {
     return "";
   }
 
-  const element =
-    document.createElement("div");
+  const element = document.createElement("div");
 
   element.innerHTML = html;
 
@@ -113,70 +103,27 @@ export default function EditorPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const initialSubjectId =
-    searchParams.get("course") ?? "";
+  const initialSubjectId = searchParams.get("course") ?? "";
 
-  const titleRef =
-    useRef<HTMLTextAreaElement>(null);
+  const titleRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const fileInputRef =
-    useRef<HTMLInputElement>(null);
+  const [subjects, setSubjects] = useState<SubjectOption[]>([]);
+  const [userId, setUserId] = useState("");
 
-  const [subjects, setSubjects] =
-    useState<SubjectOption[]>([]);
+  const [selectedSubjectId, setSelectedSubjectId] = useState(initialSubjectId);
+  const [selectedTag, setSelectedTag] = useState<TagType | null>(null);
 
-  const [userId, setUserId] =
-    useState("");
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
 
-  const [
-    selectedSubjectId,
-    setSelectedSubjectId,
-  ] = useState(initialSubjectId);
-
-  const [
-    selectedTag,
-    setSelectedTag,
-  ] = useState<TagType | null>(null);
-
-  const [title, setTitle] =
-    useState("");
-
-  const [body, setBody] =
-    useState("");
-
-  const [files, setFiles] =
-    useState<File[]>([]);
-
-
-  const [
-    fileErrorMessage,
-    setFileErrorMessage,
-  ] = useState("");
-
-  const [
-    showSubjectDropdown,
-    setShowSubjectDropdown,
-  ] = useState(false);
-
-  const [
-    isPublished,
-    setIsPublished,
-  ] = useState(false);
-
-  const [
-    tagError,
-    setTagError,
-  ] = useState(false);
-
-  const [
-    subjectError,
-    setSubjectError,
-  ] = useState(false);
-
-  const [
-    errorMessage,
-    setErrorMessage,
-  ] = useState("");
+  const [fileErrorMessage, setFileErrorMessage] = useState("");
+  const [showSubjectDropdown, setShowSubjectDropdown] = useState(false);
+  const [isPublished, setIsPublished] = useState(false);
+  const [tagError, setTagError] = useState(false);
+  const [subjectError, setSubjectError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     titleRef.current?.focus();
@@ -187,8 +134,7 @@ export default function EditorPage() {
       try {
         const {
           data: { session },
-        } =
-          await supabase.auth.getSession();
+        } = await supabase.auth.getSession();
 
         if (!session?.user) {
           router.replace("/login");
@@ -197,77 +143,71 @@ export default function EditorPage() {
 
         setUserId(session.user.id);
 
-        const {
-          data,
-          error,
-        } = await supabase
-          .from(
-            "user_course_offerings",
-          )
+        const { data, error } = await supabase
+          .from("user_course_offerings")
           .select(`
             course_offerings (
               id,
               subjects (
+                id,
+                name
+              ),
+              professors (
+                id,
                 name
               )
             )
           `)
-          .eq(
-            "user_id",
-            session.user.id,
-          );
+          .eq("user_id", session.user.id);
 
         if (error) {
           throw error;
         }
 
-        const rows =
-          (data ?? []) as unknown as MyCourseRow[];
+        const rows = (data ?? []) as unknown as MyCourseRow[];
 
-        const nextSubjects = rows
-          .map(
-            (
-              row,
-            ): SubjectOption | null => {
-              const course = pickOne(
-                row.course_offerings,
-              );
+        /* 과목 + 교수 단위로 합치기 (같은 교수 다른 시간표는 하나로) */
+        const optionMap = new Map<string, SubjectOption>();
 
-              if (!course) {
-                return null;
-              }
+        rows.forEach((row) => {
+          const course = pickOne(row.course_offerings);
 
-              const subject = pickOne(
-                course.subjects,
-              );
+          if (!course) {
+            return;
+          }
 
-              return {
-                id: course.id,
-                name:
-                  subject?.name ??
-                  "과목명 없음",
-              };
-            },
-          )
-          .filter(
-            (
-              subject,
-            ): subject is SubjectOption =>
-              subject !== null,
-          )
-          .sort((a, b) =>
-            a.name.localeCompare(
-              b.name,
-              "ko",
-            ),
-          );
+          const subject = pickOne(course.subjects);
+          const professor = pickOne(course.professors);
 
-        setSubjects(nextSubjects);
-      } catch (error) {
-        console.error(
-          "에디터 과목 조회 실패:",
-          error,
+          const key = `${subject?.id ?? "unknown"}__${professor?.id ?? "unknown"}`;
+
+          const existing = optionMap.get(key);
+
+          if (existing) {
+            existing.siblingIds.push(course.id);
+
+            if (course.id === initialSubjectId) {
+              existing.id = course.id;
+            }
+
+            return;
+          }
+
+          optionMap.set(key, {
+            id: course.id,
+            name: subject?.name ?? "과목명 없음",
+            professor: professor?.name ?? "교수 미정",
+            siblingIds: [course.id],
+          });
+        });
+
+        setSubjects(
+          Array.from(optionMap.values()).sort((a, b) =>
+            a.name.localeCompare(b.name, "ko"),
+          ),
         );
+      } catch (error) {
+        console.error("에디터 과목 조회 실패:", error);
 
         setErrorMessage(
           error instanceof Error
@@ -278,21 +218,14 @@ export default function EditorPage() {
     };
 
     void loadMyCourses();
-  }, [router]);
+  }, [router, initialSubjectId]);
 
-  const selectedSubject =
-    subjects.find(
-      (subject) =>
-        subject.id ===
-        selectedSubjectId,
-    );
+  const selectedSubject = subjects.find(
+    (s) => s.id === selectedSubjectId || s.siblingIds.includes(selectedSubjectId),
+  );
 
-  const plainBody =
-    getPlainTextFromHtml(body).trim();
-
-  const wordCount = plainBody
-    ? plainBody.split(/\s+/).length
-    : 0;
+  const plainBody = getPlainTextFromHtml(body).trim();
+  const wordCount = plainBody ? plainBody.split(/\s+/).length : 0;
 
   const handleTitleKey = (
     event: React.KeyboardEvent<HTMLTextAreaElement>,
@@ -305,9 +238,7 @@ export default function EditorPage() {
   const handleFileSelection = (
     event: React.ChangeEvent<HTMLInputElement>,
   ) => {
-    const selectedFiles = Array.from(
-      event.target.files ?? [],
-    );
+    const selectedFiles = Array.from(event.target.files ?? []);
 
     event.target.value = "";
 
@@ -317,8 +248,7 @@ export default function EditorPage() {
 
     setFileErrorMessage("");
 
-    const remainingCount =
-      MAX_FILE_COUNT - files.length;
+    const remainingCount = MAX_FILE_COUNT - files.length;
 
     if (remainingCount <= 0) {
       setFileErrorMessage(
@@ -327,11 +257,9 @@ export default function EditorPage() {
       return;
     }
 
-    const oversizedFile =
-      selectedFiles.find(
-        (file) =>
-          file.size > MAX_FILE_SIZE,
-      );
+    const oversizedFile = selectedFiles.find(
+      (file) => file.size > MAX_FILE_SIZE,
+    );
 
     if (oversizedFile) {
       setFileErrorMessage(
@@ -340,15 +268,12 @@ export default function EditorPage() {
       return;
     }
 
-    const unsupportedFile =
-      selectedFiles.find(
-        (file) =>
-          !ACCEPTED_FILE_TYPES.includes(
-            file.type as (
-              typeof ACCEPTED_FILE_TYPES
-            )[number],
-          ),
-      );
+    const unsupportedFile = selectedFiles.find(
+      (file) =>
+        !ACCEPTED_FILE_TYPES.includes(
+          file.type as (typeof ACCEPTED_FILE_TYPES)[number],
+        ),
+    );
 
     if (unsupportedFile) {
       setFileErrorMessage(
@@ -359,79 +284,50 @@ export default function EditorPage() {
 
     const existingKeys = new Set(
       files.map(
-        (file) =>
-          `${file.name}-${file.size}-${file.lastModified}`,
+        (file) => `${file.name}-${file.size}-${file.lastModified}`,
       ),
     );
 
-    const uniqueFiles =
-      selectedFiles.filter(
-        (file) =>
-          !existingKeys.has(
-            `${file.name}-${file.size}-${file.lastModified}`,
-          ),
-      );
-
-    const nextFiles = uniqueFiles.slice(
-      0,
-      remainingCount,
+    const uniqueFiles = selectedFiles.filter(
+      (file) =>
+        !existingKeys.has(
+          `${file.name}-${file.size}-${file.lastModified}`,
+        ),
     );
 
-    if (
-      uniqueFiles.length >
-      remainingCount
-    ) {
+    const nextFiles = uniqueFiles.slice(0, remainingCount);
+
+    if (uniqueFiles.length > remainingCount) {
       setFileErrorMessage(
         `첨부파일은 최대 ${MAX_FILE_COUNT}개까지 등록할 수 있어요. 가능한 파일만 추가했어요.`,
       );
     }
 
-    setFiles((previous) => [
-      ...previous,
-      ...nextFiles,
-    ]);
+    setFiles((previous) => [...previous, ...nextFiles]);
   };
 
-  const removeFile = (
-    targetIndex: number,
-  ) => {
+  const removeFile = (targetIndex: number) => {
     setFiles((previous) =>
-      previous.filter(
-        (_, index) =>
-          index !== targetIndex,
-      ),
+      previous.filter((_, index) => index !== targetIndex),
     );
 
     setFileErrorMessage("");
   };
 
-  const formatFileSize = (
-    bytes: number,
-  ) => {
+  const formatFileSize = (bytes: number) => {
     if (bytes < 1024) {
       return `${bytes} B`;
     }
 
     if (bytes < 1024 * 1024) {
-      return `${(
-        bytes / 1024
-      ).toFixed(1)} KB`;
+      return `${(bytes / 1024).toFixed(1)} KB`;
     }
 
-    return `${(
-      bytes /
-      (1024 * 1024)
-    ).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const getFileExtension = (
-    fileName: string,
-  ) => {
-    const extension =
-      fileName
-        .split(".")
-        .pop()
-        ?.toLowerCase();
+  const getFileExtension = (fileName: string) => {
+    const extension = fileName.split(".").pop()?.toLowerCase();
 
     return extension || "file";
   };
@@ -452,41 +348,27 @@ export default function EditorPage() {
     }
 
     if (!title.trim()) {
-      setErrorMessage(
-        "제목을 입력해주세요.",
-      );
+      setErrorMessage("제목을 입력해주세요.");
       hasError = true;
     }
 
     if (!plainBody) {
-      setErrorMessage(
-        "본문 내용을 입력해주세요.",
-      );
+      setErrorMessage("본문 내용을 입력해주세요.");
       hasError = true;
     }
 
-
-    if (
-      hasError ||
-      !selectedTag ||
-      !selectedSubjectId ||
-      !userId
-    ) {
+    if (hasError || !selectedTag || !selectedSubjectId || !userId) {
       return;
     }
 
     try {
       setIsPublished(true);
 
-      const {
-        data,
-        error,
-      } = await supabase
+      const { data, error } = await supabase
         .from("posts")
         .insert({
           author_id: userId,
-          course_offering_id:
-            selectedSubjectId,
+          course_offering_id: selectedSubjectId,
           post_type: selectedTag,
           title: title.trim(),
           content: body,
@@ -500,94 +382,55 @@ export default function EditorPage() {
         throw error;
       }
 
-      const created =
-        data as { id: string };
+      const created = data as { id: string };
 
       const uploadedPaths: string[] = [];
 
       try {
-        const attachmentRows:
-          AttachmentInsertRow[] = [];
+        const attachmentRows: AttachmentInsertRow[] = [];
 
-        for (
-          let index = 0;
-          index < files.length;
-          index += 1
-        ) {
+        for (let index = 0; index < files.length; index += 1) {
           const file = files[index];
-          const extension =
-            getFileExtension(file.name);
+          const extension = getFileExtension(file.name);
 
-          const storagePath =
-            `${userId}/${created.id}/${crypto.randomUUID()}.${extension}`;
+          const storagePath = `${userId}/${created.id}/${crypto.randomUUID()}.${extension}`;
 
-          const {
-            error: uploadError,
-          } = await supabase.storage
+          const { error: uploadError } = await supabase.storage
             .from("post-files")
-            .upload(
-              storagePath,
-              file,
-              {
-                contentType:
-                  file.type ||
-                  "application/octet-stream",
-                cacheControl: "3600",
-                upsert: false,
-              },
-            );
+            .upload(storagePath, file, {
+              contentType: file.type || "application/octet-stream",
+              cacheControl: "3600",
+              upsert: false,
+            });
 
           if (uploadError) {
             throw uploadError;
           }
 
-          uploadedPaths.push(
-            storagePath,
-          );
+          uploadedPaths.push(storagePath);
 
           attachmentRows.push({
             post_id: created.id,
             uploader_id: userId,
-            original_name:
-              file.name,
-            storage_path:
-              storagePath,
-            mime_type:
-              file.type ||
-              "application/octet-stream",
-            size_bytes:
-              file.size,
-            display_order:
-              index,
+            original_name: file.name,
+            storage_path: storagePath,
+            mime_type: file.type || "application/octet-stream",
+            size_bytes: file.size,
+            display_order: index,
           });
         }
 
-        if (
-          attachmentRows.length > 0
-        ) {
-          const {
-            error:
-              attachmentInsertError,
-          } = await supabase
-            .from(
-              "post_attachments",
-            )
-            .insert(
-              attachmentRows,
-            );
+        if (attachmentRows.length > 0) {
+          const { error: attachmentInsertError } = await supabase
+            .from("post_attachments")
+            .insert(attachmentRows);
 
-          if (
-            attachmentInsertError
-          ) {
+          if (attachmentInsertError) {
             throw attachmentInsertError;
           }
         }
-      } catch (
-        attachmentError
-      ) {
-        if (
-          uploadedPaths.length > 0
-        ) {
+      } catch (attachmentError) {
+        if (uploadedPaths.length > 0) {
           await supabase.storage
             .from("post-files")
             .remove(uploadedPaths);
@@ -597,22 +440,14 @@ export default function EditorPage() {
           .from("posts")
           .delete()
           .eq("id", created.id)
-          .eq(
-            "author_id",
-            userId,
-          );
+          .eq("author_id", userId);
 
         throw attachmentError;
       }
 
-      router.push(
-        `/posts/${created.id}`,
-      );
+      router.push(`/posts/${created.id}`);
     } catch (error) {
-      console.error(
-        "노트 게시 실패:",
-        error,
-      );
+      console.error("노트 게시 실패:", error);
 
       setErrorMessage(
         error instanceof Error
@@ -624,45 +459,29 @@ export default function EditorPage() {
     }
   };
 
-  const tagStyle = (
-    key: TagType,
-  ): React.CSSProperties => {
-    const isSelected =
-      selectedTag === key;
+  const tagStyle = (key: TagType): React.CSSProperties => {
+    const isSelected = selectedTag === key;
 
     if (key === "study_trail") {
       return {
-        background: isSelected
-          ? "var(--cs-purple-bg)"
-          : "transparent",
-        color: isSelected
-          ? "var(--cs-purple-dark)"
-          : "var(--cs-ink-soft)",
+        background: isSelected ? "var(--cs-purple-bg)" : "transparent",
+        color: isSelected ? "var(--cs-purple-dark)" : "var(--cs-ink-soft)",
         border: `1px solid ${
-          isSelected
-            ? "var(--cs-purple)"
-            : "var(--cs-border-str)"
+          isSelected ? "var(--cs-purple)" : "var(--cs-border-str)"
         }`,
       };
     }
 
     return {
-      background: isSelected
-        ? "var(--cs-bg)"
-        : "transparent",
-      color: isSelected
-        ? "var(--cs-ink)"
-        : "var(--cs-ink-soft)",
-      border:
-        "1px solid var(--cs-border-str)",
+      background: isSelected ? "var(--cs-bg)" : "transparent",
+      color: isSelected ? "var(--cs-ink)" : "var(--cs-ink-soft)",
+      border: "1px solid var(--cs-border-str)",
     };
   };
 
   const goBack = () => {
     if (selectedSubjectId) {
-      router.push(
-        `/courses/${selectedSubjectId}`,
-      );
+      router.push(`/courses/${selectedSubjectId}`);
       return;
     }
 
@@ -674,8 +493,7 @@ export default function EditorPage() {
       style={{
         height: "100%",
         overflowY: "auto",
-        background:
-          "var(--cs-surface)",
+        background: "var(--cs-surface)",
         display: "flex",
         flexDirection: "column",
       }}
@@ -685,26 +503,16 @@ export default function EditorPage() {
         style={{
           display: "flex",
           alignItems: "center",
-          justifyContent:
-            "space-between",
+          justifyContent: "space-between",
           padding: "10px 20px",
-          borderBottom:
-            "1px solid var(--cs-border)",
-          background:
-            "var(--cs-surface)",
+          borderBottom: "1px solid var(--cs-border)",
+          background: "var(--cs-surface)",
           flexShrink: 0,
           gap: 12,
         }}
       >
         {/* 왼쪽 영역 */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            minWidth: 0,
-          }}
-        >
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
           <button
             type="button"
             onClick={goBack}
@@ -712,65 +520,34 @@ export default function EditorPage() {
               background: "none",
               border: "none",
               cursor: "pointer",
-              color:
-                "var(--cs-ink-faint)",
+              color: "var(--cs-ink-faint)",
               fontSize: 13,
               fontFamily: "inherit",
               padding: "4px 6px",
-              borderRadius:
-                "var(--cs-radius-sm)",
-              transition:
-                "background 0.1s, color 0.1s",
+              borderRadius: "var(--cs-radius-sm)",
+              transition: "background 0.1s, color 0.1s",
             }}
-            onMouseEnter={(
-              event,
-            ) => {
-              event.currentTarget.style.background =
-                "var(--cs-bg)";
-
-              event.currentTarget.style.color =
-                "var(--cs-ink)";
+            onMouseEnter={(event) => {
+              event.currentTarget.style.background = "var(--cs-bg)";
+              event.currentTarget.style.color = "var(--cs-ink)";
             }}
-            onMouseLeave={(
-              event,
-            ) => {
-              event.currentTarget.style.background =
-                "none";
-
-              event.currentTarget.style.color =
-                "var(--cs-ink-faint)";
+            onMouseLeave={(event) => {
+              event.currentTarget.style.background = "none";
+              event.currentTarget.style.color = "var(--cs-ink-faint)";
             }}
           >
             ← 뒤로
           </button>
 
-          <span
-            style={{
-              color:
-                "var(--cs-border-str)",
-              fontSize: 13,
-            }}
-          >
-            /
-          </span>
+          <span style={{ color: "var(--cs-border-str)", fontSize: 13 }}>/</span>
 
           {/* 과목 선택 */}
-          <div
-            style={{
-              position: "relative",
-            }}
-          >
+          <div style={{ position: "relative" }}>
             <button
               type="button"
-              onClick={(
-                event,
-              ) => {
+              onClick={(event) => {
                 event.stopPropagation();
-
-                setShowSubjectDropdown(
-                  (previous) =>
-                    !previous,
-                );
+                setShowSubjectDropdown((previous) => !previous);
               }}
               style={{
                 background: "none",
@@ -779,29 +556,19 @@ export default function EditorPage() {
                 fontFamily: "inherit",
                 fontSize: 13,
                 fontWeight: 500,
-                color: selectedSubject
-                  ? "var(--cs-ink)"
-                  : "var(--cs-ink-faint)",
+                color: selectedSubject ? "var(--cs-ink)" : "var(--cs-ink-faint)",
                 padding: "4px 8px",
-                borderRadius:
-                  "var(--cs-radius-sm)",
+                borderRadius: "var(--cs-radius-sm)",
                 display: "flex",
                 alignItems: "center",
                 gap: 5,
-                transition:
-                  "background 0.1s",
+                transition: "background 0.1s",
               }}
-              onMouseEnter={(
-                event,
-              ) => {
-                event.currentTarget.style.background =
-                  "var(--cs-bg)";
+              onMouseEnter={(event) => {
+                event.currentTarget.style.background = "var(--cs-bg)";
               }}
-              onMouseLeave={(
-                event,
-              ) => {
-                event.currentTarget.style.background =
-                  "none";
+              onMouseLeave={(event) => {
+                event.currentTarget.style.background = "none";
               }}
             >
               {selectedSubject && (
@@ -809,243 +576,148 @@ export default function EditorPage() {
                   style={{
                     width: 7,
                     height: 7,
-                    borderRadius:
-                      "var(--cs-radius-full)",
-                    background:
-                      "var(--cs-purple)",
+                    borderRadius: "var(--cs-radius-full)",
+                    background: "var(--cs-purple)",
                     flexShrink: 0,
                   }}
                 />
               )}
-
               {selectedSubject
-                ? selectedSubject.name
+                ? `${selectedSubject.name} · ${selectedSubject.professor} 교수님`
                 : "과목 선택"}
-
-              <span
-                style={{
-                  fontSize: 10,
-                  opacity: 0.45,
-                }}
-              >
-                ▾
-              </span>
+              <span style={{ fontSize: 10, opacity: 0.45 }}>▾</span>
             </button>
 
             {showSubjectDropdown && (
               <div
-                onClick={(
-                  event,
-                ) =>
-                  event.stopPropagation()
-                }
+                onClick={(event) => event.stopPropagation()}
                 style={{
                   position: "absolute",
                   top: "110%",
                   left: 0,
                   zIndex: 50,
-                  background:
-                    "var(--cs-surface)",
-                  border:
-                    "1px solid var(--cs-border)",
-                  borderRadius:
-                    "var(--cs-radius-dropdown)",
+                  background: "var(--cs-surface)",
+                  border: "1px solid var(--cs-border)",
+                  borderRadius: "var(--cs-radius-dropdown)",
                   padding: 6,
-                  boxShadow:
-                    "var(--cs-shadow-dropdown)",
-                  minWidth: 200,
+                  boxShadow: "var(--cs-shadow-dropdown)",
+                  minWidth: 240,
                   maxHeight: 280,
                   overflowY: "auto",
                 }}
               >
-                {subjects.length ===
-                0 ? (
+                {subjects.length === 0 ? (
                   <div
                     style={{
-                      padding:
-                        "10px 12px",
+                      padding: "10px 12px",
                       fontSize: 12,
-                      color:
-                        "var(--cs-ink-faint)",
+                      color: "var(--cs-ink-faint)",
                     }}
                   >
-                    추가한 과목이
-                    없습니다.
+                    담은 과목이 없어요
                   </div>
                 ) : (
-                  subjects.map(
-                    (subject) => (
+                  subjects.map((s) => {
+                    const isSelected =
+                      s.id === selectedSubjectId ||
+                      s.siblingIds.includes(selectedSubjectId);
+
+                    return (
                       <div
-                        key={
-                          subject.id
-                        }
+                        key={s.id}
                         onClick={() => {
-                          setSelectedSubjectId(
-                            subject.id,
-                          );
-
-                          setSubjectError(
-                            false,
-                          );
-
-                          setShowSubjectDropdown(
-                            false,
-                          );
+                          setSelectedSubjectId(s.id);
+                          setSubjectError(false);
+                          setShowSubjectDropdown(false);
                         }}
                         style={{
-                          display:
-                            "flex",
-                          alignItems:
-                            "center",
+                          display: "flex",
+                          alignItems: "center",
                           gap: 8,
-                          padding:
-                            "8px 10px",
-                          borderRadius:
-                            "var(--cs-radius-md)",
-                          cursor:
-                            "pointer",
+                          padding: "8px 10px",
+                          borderRadius: "var(--cs-radius-md)",
+                          cursor: "pointer",
                           fontSize: 13.5,
-                          color:
-                            "var(--cs-ink)",
-                          background:
-                            subject.id ===
-                            selectedSubjectId
-                              ? "var(--cs-purple-bg)"
-                              : "transparent",
-                          transition:
-                            "background 0.1s",
+                          color: "var(--cs-ink)",
+                          background: isSelected
+                            ? "var(--cs-purple-bg)"
+                            : "transparent",
+                          transition: "background 0.1s",
                         }}
-                        onMouseEnter={(
-                          event,
-                        ) => {
-                          event.currentTarget.style.background =
-                            subject.id ===
-                            selectedSubjectId
-                              ? "var(--cs-purple-bg)"
-                              : "var(--cs-bg)";
+                        onMouseEnter={(event) => {
+                          event.currentTarget.style.background = isSelected
+                            ? "var(--cs-purple-bg)"
+                            : "var(--cs-bg)";
                         }}
-                        onMouseLeave={(
-                          event,
-                        ) => {
-                          event.currentTarget.style.background =
-                            subject.id ===
-                            selectedSubjectId
-                              ? "var(--cs-purple-bg)"
-                              : "transparent";
+                        onMouseLeave={(event) => {
+                          event.currentTarget.style.background = isSelected
+                            ? "var(--cs-purple-bg)"
+                            : "transparent";
                         }}
                       >
                         <span
                           style={{
                             width: 7,
                             height: 7,
-                            borderRadius:
-                              "var(--cs-radius-full)",
-                            background:
-                              subject.id ===
-                              selectedSubjectId
-                                ? "var(--cs-purple)"
-                                : "var(--cs-border-str)",
+                            borderRadius: "var(--cs-radius-full)",
+                            background: isSelected
+                              ? "var(--cs-purple)"
+                              : "var(--cs-border-str)",
                             flexShrink: 0,
                           }}
                         />
-
-                        {subject.name}
+                        <span style={{ flex: 1 }}>{s.name}</span>
+                        <span style={{ fontSize: 12, color: "var(--cs-ink-faint)" }}>
+                          {s.professor} 교수님
+                        </span>
                       </div>
-                    ),
-                  )
+                    );
+                  })
                 )}
               </div>
             )}
           </div>
 
-          <span
-            style={{
-              color:
-                "var(--cs-border-str)",
-              fontSize: 13,
-            }}
-          >
-            /
-          </span>
-
-          <span
-            style={{
-              fontSize: 13,
-              color:
-                "var(--cs-ink-faint)",
-            }}
-          >
-            새 노트
-          </span>
+          <span style={{ color: "var(--cs-border-str)", fontSize: 13 }}>/</span>
+          <span style={{ fontSize: 13, color: "var(--cs-ink-faint)" }}>새 노트</span>
         </div>
 
         {/* 오른쪽 영역 */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            flexShrink: 0,
-          }}
-        >
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
           {wordCount > 0 && (
-            <span
-              style={{
-                fontSize: 12,
-                color:
-                  "var(--cs-ink-faint)",
-              }}
-            >
+            <span style={{ fontSize: 12, color: "var(--cs-ink-faint)" }}>
               {wordCount}단어
             </span>
           )}
 
           <button
             type="button"
-            onClick={() =>
-              void handlePublish()
-            }
+            onClick={() => void handlePublish()}
             disabled={isPublished}
             style={{
-              background: isPublished
-                ? "var(--cs-purple-bg)"
-                : "var(--cs-purple)",
-              color: isPublished
-                ? "var(--cs-purple-dark)"
-                : "var(--cs-surface)",
+              background: isPublished ? "var(--cs-purple-bg)" : "var(--cs-purple)",
+              color: isPublished ? "var(--cs-purple-dark)" : "var(--cs-surface)",
               border: "none",
-              borderRadius:
-                "var(--cs-radius-tag)",
+              borderRadius: "var(--cs-radius-tag)",
               padding: "8px 18px",
               fontSize: 13.5,
               fontWeight: 600,
               fontFamily: "inherit",
-              cursor: isPublished
-                ? "default"
-                : "pointer",
-              transition:
-                "background 0.15s",
+              cursor: isPublished ? "default" : "pointer",
+              transition: "background 0.15s",
             }}
-            onMouseEnter={(
-              event,
-            ) => {
+            onMouseEnter={(event) => {
               if (!isPublished) {
-                event.currentTarget.style.background =
-                  "var(--cs-purple-hover)";
+                event.currentTarget.style.background = "var(--cs-purple-hover)";
               }
             }}
-            onMouseLeave={(
-              event,
-            ) => {
+            onMouseLeave={(event) => {
               if (!isPublished) {
-                event.currentTarget.style.background =
-                  "var(--cs-purple)";
+                event.currentTarget.style.background = "var(--cs-purple)";
               }
             }}
           >
-            {isPublished
-              ? "게시 중..."
-              : "게시하기"}
+            {isPublished ? "게시 중..." : "게시하기"}
           </button>
         </div>
       </div>
@@ -1056,34 +728,19 @@ export default function EditorPage() {
           flex: 1,
           display: "flex",
           justifyContent: "center",
-          padding:
-            "0 24px 80px",
+          padding: "0 24px 80px",
         }}
-        onClick={() =>
-          setShowSubjectDropdown(
-            false,
-          )
-        }
+        onClick={() => setShowSubjectDropdown(false)}
       >
-        <div
-          style={{
-            width: "100%",
-            maxWidth: 720,
-            paddingTop: 48,
-          }}
-        >
+        <div style={{ width: "100%", maxWidth: 720, paddingTop: 48 }}>
           {errorMessage && (
             <div
               style={{
                 marginBottom: 20,
-                padding:
-                  "10px 12px",
-                borderRadius:
-                  "var(--cs-radius-md)",
-                background:
-                  "var(--cs-exam-bg)",
-                color:
-                  "var(--cs-error)",
+                padding: "10px 12px",
+                borderRadius: "var(--cs-radius-md)",
+                background: "var(--cs-exam-bg)",
+                color: "var(--cs-error)",
                 fontSize: 12.5,
                 lineHeight: 1.6,
               }}
@@ -1093,108 +750,56 @@ export default function EditorPage() {
           )}
 
           {/* 자료 유형 */}
-          <div
-            style={{
-              marginBottom: 28,
-            }}
-          >
+          <div style={{ marginBottom: 28 }}>
             <div
               style={{
                 fontSize: 12,
                 fontWeight: 500,
-                color:
-                  "var(--cs-ink-faint)",
+                color: "var(--cs-ink-faint)",
                 marginBottom: 10,
               }}
             >
               자료 유형
-
-              {tagError &&
-                !selectedTag && (
-                  <span
-                    style={{
-                      color:
-                        "var(--cs-error)",
-                      marginLeft: 8,
-                      fontWeight: 400,
-                    }}
-                  >
-                    — 유형을 선택해주세요
-                  </span>
-                )}
-
-              {subjectError &&
-                !selectedSubjectId && (
-                  <span
-                    style={{
-                      color:
-                        "var(--cs-error)",
-                      marginLeft: 8,
-                      fontWeight: 400,
-                    }}
-                  >
-                    — 과목을 선택해주세요
-                  </span>
-                )}
+              {tagError && !selectedTag && (
+                <span style={{ color: "var(--cs-error)", marginLeft: 8, fontWeight: 400 }}>
+                  — 유형을 선택해주세요
+                </span>
+              )}
+              {subjectError && !selectedSubjectId && (
+                <span style={{ color: "var(--cs-error)", marginLeft: 8, fontWeight: 400 }}>
+                  — 과목을 선택해주세요
+                </span>
+              )}
             </div>
 
-            <div
-              style={{
-                display: "flex",
-                gap: 7,
-                flexWrap: "wrap",
-              }}
-            >
-              {TAG_OPTIONS.map(
-                (option) => {
-                  const isSelected =
-                    selectedTag ===
-                    option.key;
+            <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+              {TAG_OPTIONS.map((option) => {
+                const isSelected = selectedTag === option.key;
+                const style = tagStyle(option.key);
 
-                  const style =
-                    tagStyle(
-                      option.key,
-                    );
-
-                  return (
-                    <button
-                      key={
-                        option.key
-                      }
-                      type="button"
-                      onClick={() => {
-                        setSelectedTag(
-                          option.key,
-                        );
-
-                        setTagError(
-                          false,
-                        );
-                      }}
-                      style={{
-                        ...style,
-                        borderRadius:
-                          "var(--cs-radius-md)",
-                        padding:
-                          "5px 12px",
-                        fontSize: 13,
-                        fontWeight:
-                          isSelected
-                            ? 600
-                            : 400,
-                        fontFamily:
-                          "inherit",
-                        cursor:
-                          "pointer",
-                        transition:
-                          "all 0.12s",
-                      }}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                },
-              )}
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    onClick={() => {
+                      setSelectedTag(option.key);
+                      setTagError(false);
+                    }}
+                    style={{
+                      ...style,
+                      borderRadius: "var(--cs-radius-md)",
+                      padding: "5px 12px",
+                      fontSize: 13,
+                      fontWeight: isSelected ? 600 : 400,
+                      fontFamily: "inherit",
+                      cursor: "pointer",
+                      transition: "all 0.12s",
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -1202,14 +807,8 @@ export default function EditorPage() {
           <textarea
             ref={titleRef}
             value={title}
-            onChange={(event) =>
-              setTitle(
-                event.target.value,
-              )
-            }
-            onKeyDown={
-              handleTitleKey
-            }
+            onChange={(event) => setTitle(event.target.value)}
+            onKeyDown={handleTitleKey}
             placeholder="제목을 입력하세요"
             rows={1}
             disabled={isPublished}
@@ -1217,68 +816,38 @@ export default function EditorPage() {
               width: "100%",
               border: "none",
               outline: "none",
-              background:
-                "transparent",
+              background: "transparent",
               resize: "none",
               fontSize: 34,
               fontWeight: 700,
               lineHeight: 1.25,
               fontFamily: "inherit",
-              color:
-                "var(--cs-ink)",
+              color: "var(--cs-ink)",
               marginBottom: 6,
               overflow: "hidden",
-              opacity: isPublished
-                ? 0.7
-                : 1,
+              opacity: isPublished ? 0.7 : 1,
             }}
             onInput={(event) => {
-              const textarea =
-                event.currentTarget;
-
-              textarea.style.height =
-                "auto";
-
-              textarea.style.height =
-                `${textarea.scrollHeight}px`;
+              const textarea = event.currentTarget;
+              textarea.style.height = "auto";
+              textarea.style.height = `${textarea.scrollHeight}px`;
             }}
           />
 
           {/* 구분선 */}
-          <div
-            style={{
-              height: 1,
-              background:
-                "var(--cs-border)",
-              marginBottom: 24,
-            }}
-          />
+          <div style={{ height: 1, background: "var(--cs-border)", marginBottom: 24 }} />
 
           {/* Tiptap 에디터 */}
-          <RichTextEditor
-            value={body}
-            onChange={setBody}
-            disabled={isPublished}
-          />
+          <RichTextEditor value={body} onChange={setBody} disabled={isPublished} />
 
-          <div
-            style={{
-              marginTop: 14,
-              fontSize: 12,
-              color:
-                "var(--cs-ink-faint)",
-              lineHeight: 1.7,
-            }}
-          >
-          </div>
+          <div style={{ marginTop: 14, fontSize: 12, color: "var(--cs-ink-faint)", lineHeight: 1.7 }} />
 
           {/* 첨부파일 */}
           <section
             style={{
               marginTop: 28,
               padding: 18,
-              border:
-                "1px solid #ded9ee",
+              border: "1px solid #ded9ee",
               borderRadius: 10,
               background: "#ffffff",
             }}
@@ -1286,57 +855,30 @@ export default function EditorPage() {
             <div
               style={{
                 display: "flex",
-                alignItems:
-                  "flex-start",
-                justifyContent:
-                  "space-between",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
                 gap: 16,
                 marginBottom: 14,
               }}
             >
               <div>
-                <h3
-                  style={{
-                    margin: "0 0 5px",
-                    color:
-                      "var(--cs-ink)",
-                    fontSize: 12,
-                    fontWeight: 700,
-                  }}
-                >
+                <h3 style={{ margin: "0 0 5px", color: "var(--cs-ink)", fontSize: 12, fontWeight: 700 }}>
                   첨부파일
                 </h3>
-
-                <p
-                  style={{
-                    margin: 0,
-                    color:
-                      "var(--cs-ink-faint)",
-                    fontSize: 10.5,
-                    lineHeight: 1.6,
-                  }}
-                >
-                  PDF, 이미지, Word,
-                  PowerPoint 파일을 파일당
-                  최대 20MB까지 등록할 수
-                  있어요.
+                <p style={{ margin: 0, color: "var(--cs-ink-faint)", fontSize: 10.5, lineHeight: 1.6 }}>
+                  PDF, 이미지, Word, PowerPoint 파일을 파일당 최대 20MB까지 등록할 수 있어요.
                 </p>
               </div>
 
               <span
                 style={{
                   flexShrink: 0,
-                  color:
-                    files.length ===
-                    MAX_FILE_COUNT
-                      ? "var(--cs-purple-dark)"
-                      : "var(--cs-ink-faint)",
+                  color: files.length === MAX_FILE_COUNT ? "var(--cs-purple-dark)" : "var(--cs-ink-faint)",
                   fontSize: 11,
                   fontWeight: 700,
                 }}
               >
-                {files.length}/
-                {MAX_FILE_COUNT}
+                {files.length}/{MAX_FILE_COUNT}
               </span>
             </div>
 
@@ -1345,61 +887,31 @@ export default function EditorPage() {
               type="file"
               multiple
               accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.ppt,.pptx"
-              onChange={
-                handleFileSelection
-              }
-              disabled={
-                isPublished ||
-                files.length >=
-                  MAX_FILE_COUNT
-              }
-              style={{
-                display: "none",
-              }}
+              onChange={handleFileSelection}
+              disabled={isPublished || files.length >= MAX_FILE_COUNT}
+              style={{ display: "none" }}
             />
 
             <button
               type="button"
-              onClick={() =>
-                fileInputRef.current?.click()
-              }
-              disabled={
-                isPublished ||
-                files.length >=
-                  MAX_FILE_COUNT
-              }
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isPublished || files.length >= MAX_FILE_COUNT}
               style={{
                 display: "flex",
                 width: "100%",
                 minHeight: 110,
                 alignItems: "center",
-                justifyContent:
-                  "center",
-                flexDirection:
-                  "column",
+                justifyContent: "center",
+                flexDirection: "column",
                 gap: 8,
-                border:
-                  "1px dashed #cfc7e8",
+                border: "1px dashed #cfc7e8",
                 borderRadius: 9,
-                background:
-                  "#faf9fd",
-                color:
-                  "var(--cs-ink-soft)",
-                fontFamily:
-                  "inherit",
+                background: "#faf9fd",
+                color: "var(--cs-ink-soft)",
+                fontFamily: "inherit",
                 fontSize: 12,
-                cursor:
-                  isPublished ||
-                  files.length >=
-                    MAX_FILE_COUNT
-                    ? "not-allowed"
-                    : "pointer",
-                opacity:
-                  isPublished ||
-                  files.length >=
-                    MAX_FILE_COUNT
-                    ? 0.6
-                    : 1,
+                cursor: isPublished || files.length >= MAX_FILE_COUNT ? "not-allowed" : "pointer",
+                opacity: isPublished || files.length >= MAX_FILE_COUNT ? 0.6 : 1,
               }}
             >
               <span
@@ -1408,215 +920,110 @@ export default function EditorPage() {
                   display: "flex",
                   width: 34,
                   height: 34,
-                  alignItems:
-                    "center",
-                  justifyContent:
-                    "center",
-                  border:
-                    "1px solid #ded9ee",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  border: "1px solid #ded9ee",
                   borderRadius: "50%",
-                  background:
-                    "#ffffff",
-                  color:
-                    "var(--cs-purple-dark)",
+                  background: "#ffffff",
+                  color: "var(--cs-purple-dark)",
                   fontSize: 17,
                 }}
               >
                 ↑
               </span>
-
-              <strong
-                style={{
-                  fontSize: 11.5,
-                }}
-              >
-                파일 선택하기
-              </strong>
-
-              <small
-                style={{
-                  color:
-                    "var(--cs-ink-faint)",
-                  fontSize: 10,
-                }}
-              >
+              <strong style={{ fontSize: 11.5 }}>파일 선택하기</strong>
+              <small style={{ color: "var(--cs-ink-faint)", fontSize: 10 }}>
                 최대 5개 · 파일당 20MB
               </small>
             </button>
 
             {fileErrorMessage && (
-              <p
-                style={{
-                  margin:
-                    "10px 0 0",
-                  color:
-                    "var(--cs-error)",
-                  fontSize: 11,
-                  lineHeight: 1.5,
-                }}
-              >
+              <p style={{ margin: "10px 0 0", color: "var(--cs-error)", fontSize: 11, lineHeight: 1.5 }}>
                 {fileErrorMessage}
               </p>
             )}
 
             {files.length > 0 && (
-              <ul
-                style={{
-                  display: "flex",
-                  flexDirection:
-                    "column",
-                  gap: 8,
-                  margin: "14px 0 0",
-                  padding: 0,
-                  listStyle: "none",
-                }}
-              >
-                {files.map(
-                  (file, index) => (
-                    <li
-                      key={`${file.name}-${file.size}-${file.lastModified}`}
+              <ul style={{ display: "flex", flexDirection: "column", gap: 8, margin: "14px 0 0", padding: 0, listStyle: "none" }}>
+                {files.map((file, index) => (
+                  <li
+                    key={`${file.name}-${file.size}-${file.lastModified}`}
+                    style={{
+                      display: "flex",
+                      minHeight: 56,
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      padding: "8px 11px",
+                      border: "1px solid #e5e1f0",
+                      borderRadius: 8,
+                      background: "#ffffff",
+                    }}
+                  >
+                    <div style={{ display: "flex", minWidth: 0, alignItems: "center", gap: 10 }}>
+                      <span
+                        style={{
+                          display: "flex",
+                          width: 38,
+                          height: 38,
+                          flexShrink: 0,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          borderRadius: 7,
+                          background: "#f0edf8",
+                          color: "var(--cs-purple-dark)",
+                          fontSize: 9,
+                          fontWeight: 800,
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        {getFileExtension(file.name)}
+                      </span>
+
+                      <span style={{ display: "flex", minWidth: 0, flexDirection: "column", gap: 4 }}>
+                        <strong
+                          style={{
+                            overflow: "hidden",
+                            color: "var(--cs-ink)",
+                            fontSize: 11,
+                            fontWeight: 650,
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {file.name}
+                        </strong>
+                        <small style={{ color: "var(--cs-ink-faint)", fontSize: 10 }}>
+                          {formatFileSize(file.size)}
+                        </small>
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => removeFile(index)}
+                      disabled={isPublished}
+                      aria-label={`${file.name} 삭제`}
+                      title="첨부파일 삭제"
                       style={{
-                        display:
-                          "flex",
-                        minHeight: 56,
-                        alignItems:
-                          "center",
-                        justifyContent:
-                          "space-between",
-                        gap: 12,
-                        padding:
-                          "8px 11px",
-                        border:
-                          "1px solid #e5e1f0",
-                        borderRadius: 8,
-                        background:
-                          "#ffffff",
+                        display: "flex",
+                        width: 30,
+                        height: 30,
+                        flexShrink: 0,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        border: 0,
+                        borderRadius: 6,
+                        background: "transparent",
+                        color: "var(--cs-ink-faint)",
+                        fontSize: 18,
+                        cursor: isPublished ? "not-allowed" : "pointer",
                       }}
                     >
-                      <div
-                        style={{
-                          display:
-                            "flex",
-                          minWidth: 0,
-                          alignItems:
-                            "center",
-                          gap: 10,
-                        }}
-                      >
-                        <span
-                          style={{
-                            display:
-                              "flex",
-                            width: 38,
-                            height: 38,
-                            flexShrink: 0,
-                            alignItems:
-                              "center",
-                            justifyContent:
-                              "center",
-                            borderRadius:
-                              7,
-                            background:
-                              "#f0edf8",
-                            color:
-                              "var(--cs-purple-dark)",
-                            fontSize: 9,
-                            fontWeight:
-                              800,
-                            textTransform:
-                              "uppercase",
-                          }}
-                        >
-                          {getFileExtension(
-                            file.name,
-                          )}
-                        </span>
-
-                        <span
-                          style={{
-                            display:
-                              "flex",
-                            minWidth: 0,
-                            flexDirection:
-                              "column",
-                            gap: 4,
-                          }}
-                        >
-                          <strong
-                            style={{
-                              overflow:
-                                "hidden",
-                              color:
-                                "var(--cs-ink)",
-                              fontSize:
-                                11,
-                              fontWeight:
-                                650,
-                              textOverflow:
-                                "ellipsis",
-                              whiteSpace:
-                                "nowrap",
-                            }}
-                          >
-                            {file.name}
-                          </strong>
-
-                          <small
-                            style={{
-                              color:
-                                "var(--cs-ink-faint)",
-                              fontSize:
-                                10,
-                            }}
-                          >
-                            {formatFileSize(
-                              file.size,
-                            )}
-                          </small>
-                        </span>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          removeFile(
-                            index,
-                          )
-                        }
-                        disabled={
-                          isPublished
-                        }
-                        aria-label={`${file.name} 삭제`}
-                        title="첨부파일 삭제"
-                        style={{
-                          display:
-                            "flex",
-                          width: 30,
-                          height: 30,
-                          flexShrink: 0,
-                          alignItems:
-                            "center",
-                          justifyContent:
-                            "center",
-                          border: 0,
-                          borderRadius:
-                            6,
-                          background:
-                            "transparent",
-                          color:
-                            "var(--cs-ink-faint)",
-                          fontSize: 18,
-                          cursor:
-                            isPublished
-                              ? "not-allowed"
-                              : "pointer",
-                        }}
-                      >
-                        ×
-                      </button>
-                    </li>
-                  ),
-                )}
+                      ×
+                    </button>
+                  </li>
+                ))}
               </ul>
             )}
           </section>
