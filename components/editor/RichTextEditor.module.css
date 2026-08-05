@@ -1,99 +1,296 @@
 .editor {
+  width: 100%;
   overflow: hidden;
-  border: 1px solid #ddd8d0;
-  border-radius: 9px;
-  background: #fff;
+  background: #ffffff;
 }
 
+.disabled {
+  opacity: 0.65;
+}
+
+/* 툴바 */
 .toolbar {
   display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  padding: 8px 10px;
-  border-bottom: 1px solid #ebe7df;
-  background: #f8f7f4;
+  min-height: 43px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  overflow-x: auto;
+
+  border-bottom: 1px solid #e5e1f0;
+  background: #f8f7fc;
 }
 
-.toolbar button {
-  min-width: 42px;
-  height: 30px;
+/* 툴바 버튼 */
+.toolbarButton {
+  height: 28px;
+  flex-shrink: 0;
   padding: 0 9px;
-  border: 0;
+
+  border: 1px solid transparent;
   border-radius: 5px;
+
   background: transparent;
-  color: #68625a;
-  font-size: 9px;
-  font-weight: 700;
+  color: #696570;
+
+  font-family: inherit;
+  font-size: 10px;
+  white-space: nowrap;
+
   cursor: pointer;
+
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
 }
 
-.toolbar button:hover {
-  background: #ece9e3;
+.toolbarButton:hover:not(:disabled) {
+  border-color: #ddd7eb;
+  background: #efedf5;
+  color: #47434d;
 }
 
-.toolbar .activeButton {
-  background: #dedad3;
-  color: #393631;
+.toolbarButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
-.content {
-  min-height: 360px;
+/* 선택된 서식 버튼 */
+.activeButton {
+  border-color: #cfc6ec;
+  background: #eeeaff;
+  color: #6656bd;
+  font-weight: 800;
 }
 
-.content :global(.tiptap) {
-  min-height: 360px;
-  padding: 18px;
-  outline: none;
-  color: #4e4942;
+.boldButton {
+  min-width: 30px;
   font-size: 12px;
-  line-height: 1.75;
+  font-weight: 800;
 }
 
-.content :global(.tiptap p) {
+.italicButton {
+  min-width: 30px;
+  font-family: Georgia, serif;
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* 툴바 구분선 */
+.divider {
+  width: 1px;
+  height: 18px;
+  flex-shrink: 0;
+  margin: 0 2px;
+  background: #ddd8e8;
+}
+
+/* 에디터 본문 감싸는 영역 */
+.content {
+  background: #ffffff;
+}
+
+/* 실제 Tiptap 입력 영역 */
+.proseMirror {
+  display: block;
+  width: 100%;
+  min-height: 350px;
+
+  padding: 22px;
+  box-sizing: border-box;
+
+  border: 0;
+  outline: none;
+
+  background: #ffffff;
+  color: #403d45;
+
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.8;
+
+  overflow-wrap: anywhere;
+}
+
+.proseMirror > *:first-child {
+  margin-top: 0;
+}
+
+.proseMirror > *:last-child {
+  margin-bottom: 0;
+}
+
+.proseMirror p {
   margin: 0 0 12px;
 }
 
-.content :global(.tiptap h2) {
+/* 제목 */
+.proseMirror h2 {
   margin: 24px 0 12px;
-  color: #34312d;
-  font-size: 21px;
-  line-height: 1.4;
+
+  color: #393640;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.45;
 }
 
-.content :global(.tiptap ul),
-.content :global(.tiptap ol) {
-  margin: 12px 0;
-  padding-left: 24px;
+/* 글머리 기호 목록 */
+.proseMirror ul {
+  margin: 10px 0 14px;
+  padding-left: 25px;
+
+  list-style-type: disc !important;
+  list-style-position: outside !important;
 }
 
-.content :global(.tiptap blockquote) {
-  margin: 16px 0;
+/* 번호 목록 */
+.proseMirror ol {
+  margin: 10px 0 14px;
+  padding-left: 27px;
+
+  list-style-type: decimal !important;
+  list-style-position: outside !important;
+}
+
+.proseMirror li {
+  display: list-item !important;
+  margin: 4px 0;
+  padding-left: 2px;
+}
+
+.proseMirror li::marker {
+  color: #7565ca;
+  font-weight: 700;
+}
+
+.proseMirror li p {
+  margin: 0;
+}
+
+/* 중첩 목록 */
+.proseMirror ul ul {
+  list-style-type: circle !important;
+}
+
+.proseMirror ul ul ul {
+  list-style-type: square !important;
+}
+
+/* 인용문 */
+.proseMirror blockquote {
+  margin: 17px 0;
   padding: 10px 14px;
-  border-left: 3px solid #aaa49a;
-  background: #f2f0ec;
-  color: #69635b;
+
+  border-left: 3px solid #8172d9;
+  border-radius: 0 6px 6px 0;
+
+  background: #f5f2ff;
+  color: #625e68;
 }
 
-.content :global(.tiptap pre) {
+.proseMirror blockquote p {
+  margin: 0;
+}
+
+/* 코드 블록 */
+.proseMirror pre {
+  margin: 17px 0;
+  padding: 14px 16px;
   overflow-x: auto;
-  margin: 16px 0;
-  padding: 15px;
-  border-radius: 8px;
-  background: #292825;
-  color: #f3f0e9;
+
+  border: 1px solid #ded9ea;
+  border-radius: 7px;
+
+  background: #f7f6fb;
+  color: #403d45;
+
+  font-family:
+    Consolas,
+    "Courier New",
+    monospace;
+
+  font-size: 12px;
+  line-height: 1.65;
 }
 
-.content :global(.tiptap code) {
-  font-family: Consolas, "Courier New", monospace;
+/* 인라인 코드 */
+.proseMirror code {
+  padding: 2px 5px;
+
+  border-radius: 4px;
+  background: #f0edf8;
+  color: #6557b5;
+
+  font-family:
+    Consolas,
+    "Courier New",
+    monospace;
+
+  font-size: 0.92em;
 }
 
+.proseMirror pre code {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+}
+
+/* 빈 에디터 안내 문구 */
+.proseMirror p.is-editor-empty:first-child::before {
+  content: "여기에 내용을 입력하세요";
+
+  height: 0;
+  float: left;
+
+  color: #aaa5b1;
+  pointer-events: none;
+}
+
+/* 에디터 하단 안내 */
+.footer {
+  display: flex;
+  min-height: 39px;
+  align-items: center;
+
+  padding: 0 14px;
+
+  border-top: 1px solid #e5e1f0;
+  background: #faf9fd;
+
+  color: #96919e;
+  font-size: 9px;
+}
+
+/* 로딩 화면 */
 .loading {
   display: flex;
-  min-height: 360px;
+  min-height: 350px;
   align-items: center;
   justify-content: center;
-  border: 1px solid #ddd8d0;
-  border-radius: 9px;
-  color: #99938b;
-  font-size: 10px;
+
+  background: #ffffff;
+  color: #96919e;
+
+  font-size: 11px;
+}
+
+/* 모바일 */
+@media (max-width: 700px) {
+  .toolbar {
+    padding: 6px 8px;
+  }
+
+  .toolbarButton {
+    padding: 0 8px;
+  }
+
+  .proseMirror {
+    min-height: 280px;
+    padding: 16px;
+  }
+
+  .footer {
+    display: none;
+  }
 }

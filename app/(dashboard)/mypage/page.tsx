@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import TagChip, { TagType } from "@/components/common/TagChip";
@@ -139,6 +139,9 @@ export default function MyPage() {
   const [activeTab, setActiveTab] = useState<MyTab>('points')
   const [editingNickname, setEditingNickname] = useState(false)
   const [nickname, setNickname] = useState('')
+  const [avatarUrl, setAvatarUrl] = useState('')
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
 
   const [userId, setUserId] = useState("");
   const [email, setEmail] = useState("");
@@ -172,17 +175,20 @@ export default function MyPage() {
         const { data: profileData, error: profileError } =
           await supabase
             .from("profiles")
-            .select("nickname")
+            .select("nickname, avatar_url")
             .eq("id", uid)
             .maybeSingle();
 
         if (profileError) {
           console.error("프로필 조회 실패:", profileError);
         } else {
-          setNickname(
-            (profileData as { nickname: string | null } | null)
-              ?.nickname ?? "",
-          );
+          const profile = profileData as {
+            nickname: string | null;
+            avatar_url: string | null;
+          } | null;
+
+          setNickname(profile?.nickname ?? "");
+          setAvatarUrl(profile?.avatar_url ?? "");
         }
 
         /* 포인트 지갑 */
@@ -381,6 +387,86 @@ export default function MyPage() {
     }
   };
 
+  const uploadAvatar = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+
+    if (!file || !userId || isUploadingAvatar) {
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      alert("이미지 파일만 등록할 수 있어요.");
+      event.target.value = "";
+      return;
+    }
+
+    const maxFileSize = 5 * 1024 * 1024;
+
+    if (file.size > maxFileSize) {
+      alert("프로필 이미지는 5MB 이하만 등록할 수 있어요.");
+      event.target.value = "";
+      return;
+    }
+
+    try {
+      setIsUploadingAvatar(true);
+
+      const extension =
+        file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const filePath =
+        `${userId}/${crypto.randomUUID()}.${extension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: false,
+          contentType: file.type,
+        });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(filePath);
+
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({
+          avatar_url: publicUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", userId);
+
+      if (profileError) {
+        await supabase.storage
+          .from("avatars")
+          .remove([filePath]);
+
+        throw profileError;
+      }
+
+      setAvatarUrl(publicUrl);
+    } catch (error) {
+      console.error("프로필 이미지 등록 실패:", error);
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : "프로필 이미지를 등록하지 못했어요.",
+      );
+    } finally {
+      setIsUploadingAvatar(false);
+      event.target.value = "";
+    }
+  };
+
   const totalPoints = balance;
   const initial = nickname.slice(0, 1) || "나";
 
@@ -411,14 +497,76 @@ export default function MyPage() {
           padding: '24px', background: 'var(--cs-card-bg)', borderRadius: 'var(--cs-radius-2xl)',
           border: '1px solid var(--cs-border)', marginBottom: 28,
         }}>
-          <div style={{
-            width: 56, height: 56, borderRadius: 'var(--cs-radius-full)',
-            background: 'var(--cs-purple-bg)', color: 'var(--cs-purple-dark)',
-            fontSize: 20, fontWeight: 600,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexShrink: 0,
-          }}>
-            {initial}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={isUploadingAvatar}
+              aria-label="프로필 이미지 변경"
+              title="프로필 이미지 변경"
+              style={{
+                width: 56,
+                height: 56,
+                padding: 0,
+                borderRadius: 'var(--cs-radius-full)',
+                border: '1px solid var(--cs-border)',
+                background: 'var(--cs-purple-bg)',
+                color: 'var(--cs-purple-dark)',
+                fontSize: 20,
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden',
+                cursor: isUploadingAvatar ? 'wait' : 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt="프로필"
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    display: 'block',
+                  }}
+                />
+              ) : (
+                initial
+              )}
+            </button>
+
+            <span
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                right: -2,
+                bottom: -2,
+                width: 20,
+                height: 20,
+                borderRadius: 'var(--cs-radius-full)',
+                border: '2px solid var(--cs-card-bg)',
+                background: 'var(--cs-purple)',
+                color: '#ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 11,
+                pointerEvents: 'none',
+              }}
+            >
+              {isUploadingAvatar ? '…' : '✎'}
+            </span>
+
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              onChange={uploadAvatar}
+              style={{ display: 'none' }}
+            />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             {editingNickname ? (
@@ -538,7 +686,7 @@ export default function MyPage() {
               <div style={{ fontSize: 12, color: 'var(--cs-purple-dark)', lineHeight: 1.7, textAlign: 'right' }}>
                 노트 열람 시 1p 차감<br />
                 노트 업로드 시 30p 적립<br />
-                가입 보너스 50p
+                가입 보너스 30p
               </div>
             </div>
             {pointHistory.length === 0 ? (
