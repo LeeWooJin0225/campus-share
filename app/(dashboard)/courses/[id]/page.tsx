@@ -59,8 +59,8 @@ type PostRow = {
   comment_count: number | null;
   course_offering_id: string;
   profiles:
-    | { nickname: string | null }
-    | { nickname: string | null }[]
+    | { nickname: string | null; is_deleted: boolean | null }
+    | { nickname: string | null; is_deleted: boolean | null }[]
     | null;
 };
 
@@ -248,7 +248,8 @@ export default function CoursePage() {
               comment_count,
               course_offering_id,
               profiles:author_id (
-                nickname
+                nickname,
+                is_deleted
               )
             `)
             .in("course_offering_id", offeringIds)
@@ -271,7 +272,9 @@ export default function CoursePage() {
             docId: row.id,
             tag: row.post_type,
             title: row.title,
-            author: profile?.nickname ?? "익명",
+            author: profile?.is_deleted
+              ? "탈퇴한 사용자"
+              : profile?.nickname ?? "익명",
             time: formatRelativeDate(row.created_at),
             comments: row.comment_count ?? 0,
           };

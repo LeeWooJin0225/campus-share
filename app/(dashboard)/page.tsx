@@ -56,8 +56,8 @@ type RecentPostRow = {
   created_at: string;
   comment_count: number | null;
   profiles:
-    | { nickname: string | null }
-    | { nickname: string | null }[]
+    | { nickname: string | null; is_deleted: boolean | null }
+    | { nickname: string | null; is_deleted: boolean | null }[]
     | null;
   course_offerings:
     | CourseRelation
@@ -228,7 +228,8 @@ export default function HomePage() {
               created_at,
               comment_count,
               profiles (
-                nickname
+                nickname,
+                is_deleted
               ),
               course_offerings (
                 id,
@@ -260,7 +261,9 @@ export default function HomePage() {
               id: row.id,
               title: row.title,
               tag: row.post_type,
-              author: profile?.nickname ?? "익명",
+              author: profile?.is_deleted
+                ? "탈퇴한 사용자"
+                : profile?.nickname ?? "익명",
               timeAgo: formatRelativeDate(row.created_at),
               comments: row.comment_count ?? 0,
               subjectName: subject?.name ?? "",

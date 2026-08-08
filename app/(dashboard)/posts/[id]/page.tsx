@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
+import editorStyles from "@/components/editor/RichTextEditor.module.css";
 import TagChip, { TagType } from "@/components/common/TagChip";
 import { supabase } from "@/lib/supabase";
 
-/* post_likes 테이블이 생기면 true 로 바꾸세요. */
-const LIKES_ENABLED = false;
+const LIKES_ENABLED = true;
 
 type DocInfo = {
   id: string;
@@ -19,6 +19,7 @@ type DocInfo = {
   content: string;
   courseOfferingId: string;
   price: number;
+  isPublished: boolean;
 };
 
 type CourseInfo = {
@@ -53,17 +54,17 @@ type CommentItem = {
 type CourseRelation = {
   id: string;
   subjects:
-    | { name: string }
-    | { name: string }[]
-    | null;
+  | { name: string }
+  | { name: string }[]
+  | null;
   professors:
-    | { name: string }
-    | { name: string }[]
-    | null;
+  | { name: string }
+  | { name: string }[]
+  | null;
   semesters:
-    | { year: number; term: number }
-    | { year: number; term: number }[]
-    | null;
+  | { year: number; term: number }
+  | { year: number; term: number }[]
+  | null;
 };
 
 type PostRow = {
@@ -75,14 +76,15 @@ type PostRow = {
   created_at: string;
   course_offering_id: string;
   price: number;
+  is_published: boolean;
   profiles:
-    | { nickname: string | null }
-    | { nickname: string | null }[]
-    | null;
+  | { nickname: string | null; is_deleted: boolean | null }
+  | { nickname: string | null; is_deleted: boolean | null }[]
+  | null;
   course_offerings:
-    | CourseRelation
-    | CourseRelation[]
-    | null;
+  | CourseRelation
+  | CourseRelation[]
+  | null;
 };
 
 type CommentRow = {
@@ -94,15 +96,17 @@ type CommentRow = {
   updated_at: string | null;
   is_anonymous: boolean | null;
   profiles:
-    | {
-        nickname: string | null;
-        avatar_url: string | null;
-      }
-    | {
-        nickname: string | null;
-        avatar_url: string | null;
-      }[]
-    | null;
+  | {
+    nickname: string | null;
+    avatar_url: string | null;
+    is_deleted: boolean | null;
+  }
+  | {
+    nickname: string | null;
+    avatar_url: string | null;
+    is_deleted: boolean | null;
+  }[]
+  | null;
 };
 
 
@@ -174,13 +178,6 @@ function getFileExtension(fileName: string) {
   );
 }
 
-/* DB 의 content 한 덩어리를 Figma 의 body 배열 형태로 변환 */
-function splitParagraphs(content: string): string[] {
-  return content
-    .split(/\n{2,}/)
-    .map((block) => block.trim())
-    .filter((block) => block.length > 0);
-}
 
 export default function DocumentPage() {
   const router = useRouter();
@@ -213,6 +210,8 @@ export default function DocumentPage() {
     useState(0)
   const [hasPurchased, setHasPurchased] =
     useState(false)
+  const [purchaseCount, setPurchaseCount] =
+    useState(0)
   const [isPurchasing, setIsPurchasing] =
     useState(false)
   const [
@@ -255,8 +254,10 @@ export default function DocumentPage() {
               created_at,
               course_offering_id,
               price,
+              is_published,
               profiles:author_id (
-                nickname
+                nickname,
+                is_deleted
               ),
               course_offerings (
                 id,
@@ -298,11 +299,14 @@ export default function DocumentPage() {
           title: row.title,
           tag: row.post_type,
           authorId: row.author_id,
-          author: profile?.nickname ?? "익명",
+          author: profile?.is_deleted
+            ? "탈퇴한 사용자"
+            : profile?.nickname ?? "익명",
           timeAgo: formatRelativeDate(row.created_at),
           content: row.content ?? "",
           courseOfferingId: row.course_offering_id,
           price: 1,
+          isPublished: row.is_published,
         });
 
         setSubject({
@@ -318,6 +322,7 @@ export default function DocumentPage() {
         const [
           walletResult,
           purchaseResult,
+          purchaseCountResult,
         ] = await Promise.all([
           supabase
             .from("point_wallets")
@@ -337,6 +342,14 @@ export default function DocumentPage() {
               session.user.id,
             )
             .maybeSingle(),
+
+          supabase
+            .from("post_purchases")
+            .select("id", {
+              count: "exact",
+              head: true,
+            })
+            .eq("post_id", docId),
         ]);
 
         if (walletResult.error) {
@@ -347,7 +360,7 @@ export default function DocumentPage() {
         } else {
           setWalletBalance(
             walletResult.data?.balance ??
-              0,
+            0,
           );
         }
 
@@ -361,6 +374,17 @@ export default function DocumentPage() {
             Boolean(
               purchaseResult.data,
             ),
+          );
+        }
+
+        if (purchaseCountResult.error) {
+          console.error(
+            "구매 수 조회 실패:",
+            purchaseCountResult.error,
+          );
+        } else {
+          setPurchaseCount(
+            purchaseCountResult.count ?? 0,
           );
         }
 
@@ -423,7 +447,8 @@ export default function DocumentPage() {
               is_anonymous,
               profiles:author_id (
                 nickname,
-                avatar_url
+                avatar_url,
+                is_deleted
               )
             `)
             .eq("post_id", docId)
@@ -449,8 +474,11 @@ export default function DocumentPage() {
           setComments(
             commentRows.map((c): CommentItem => {
               const anon = c.is_anonymous ?? false;
+              const commentProfile = pickOne(c.profiles);
               const nickname =
-                pickOne(c.profiles)?.nickname ?? "익명";
+                commentProfile?.is_deleted
+                  ? "탈퇴한 사용자"
+                  : commentProfile?.nickname ?? "익명";
               const author = anon ? "익명" : nickname;
 
               const createdAt =
@@ -473,7 +501,7 @@ export default function DocumentPage() {
                   anon
                     ? null
                     : pickOne(c.profiles)
-                        ?.avatar_url ?? null,
+                      ?.avatar_url ?? null,
                 anon,
                 time: formatRelativeDate(c.created_at),
                 text: c.content,
@@ -574,7 +602,11 @@ export default function DocumentPage() {
 
     const c = data as unknown as CommentRow;
     const anon = c.is_anonymous ?? false;
-    const nickname = pickOne(c.profiles)?.nickname ?? "익명";
+    const commentProfile = pickOne(c.profiles);
+    const nickname =
+      commentProfile?.is_deleted
+        ? "탈퇴한 사용자"
+        : commentProfile?.nickname ?? "익명";
     const author = anon ? "익명" : nickname;
 
     setComments(prev => [...prev, {
@@ -589,7 +621,7 @@ export default function DocumentPage() {
         anon
           ? null
           : pickOne(c.profiles)
-              ?.avatar_url ?? null,
+            ?.avatar_url ?? null,
       anon,
       time: formatRelativeDate(c.created_at),
       text: c.content,
@@ -600,6 +632,7 @@ export default function DocumentPage() {
   const purchasePost = async () => {
     if (
       !doc ||
+      !doc.isPublished ||
       doc.authorId === userId ||
       hasPurchased ||
       isPurchasing
@@ -638,12 +671,13 @@ export default function DocumentPage() {
         : data;
 
       setHasPurchased(true);
+      setPurchaseCount((previous) => previous + 1);
       setWalletBalance(
         result?.buyer_balance ??
-          Math.max(
-            0,
-            walletBalance - 1,
-          ),
+        Math.max(
+          0,
+          walletBalance - 1,
+        ),
       );
 
       alert(
@@ -732,7 +766,7 @@ export default function DocumentPage() {
      */
     setReplyingToId(
       targetComment.parentCommentId ??
-        targetComment.id,
+      targetComment.id,
     );
     setReplyText("");
     setReplyAnonymous(false);
@@ -803,7 +837,9 @@ export default function DocumentPage() {
         pickOne(c.profiles);
 
       const nickname =
-        profile?.nickname ?? "익명";
+        profile?.is_deleted
+          ? "탈퇴한 사용자"
+          : profile?.nickname ?? "익명";
 
       const author =
         anon ? "익명" : nickname;
@@ -821,7 +857,7 @@ export default function DocumentPage() {
           anon
             ? null
             : profile?.avatar_url ??
-              null,
+            null,
         anon,
         time: formatRelativeDate(
           c.created_at,
@@ -834,11 +870,11 @@ export default function DocumentPage() {
         const nextComments =
           previous.map((item) =>
             item.id ===
-            parentCommentId
+              parentCommentId
               ? {
-                  ...item,
-                  hasReplies: true,
-                }
+                ...item,
+                hasReplies: true,
+              }
               : item,
           );
 
@@ -861,10 +897,10 @@ export default function DocumentPage() {
 
         while (
           insertIndex <
-            nextComments.length &&
+          nextComments.length &&
           nextComments[insertIndex]
             .parentCommentId ===
-            parentCommentId
+          parentCommentId
         ) {
           insertIndex += 1;
         }
@@ -915,8 +951,77 @@ export default function DocumentPage() {
       return;
     }
 
+    /*
+     * 구매자가 한 명이라도 있으면 실제 삭제하지 않습니다.
+     * 신규 노출/구매만 막고 기존 구매자는 계속 열람할 수 있게
+     * is_published 만 false 로 바꿉니다.
+     */
+    if (purchaseCount > 0) {
+      if (!doc.isPublished) {
+        alert("이미 게시 중단된 글입니다.");
+        return;
+      }
+
+      const confirmed = window.confirm(
+        `이 글은 ${purchaseCount}명이 구매했어요.\n완전히 삭제할 수 없으며 게시 중단 처리됩니다.\n기존 구매자는 계속 열람할 수 있어요.\n\n게시 중단할까요?`,
+      );
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        setIsDeletingPost(true);
+
+        const { error } = await supabase
+          .from("posts")
+          .update({
+            is_published: false,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", docId)
+          .eq("author_id", userId);
+
+        if (error) {
+          throw error;
+        }
+
+        setDoc((previous) =>
+          previous
+            ? {
+              ...previous,
+              isPublished: false,
+            }
+            : previous,
+        );
+
+        alert(
+          "게시가 중단되었습니다. 기존 구매자는 계속 자료를 볼 수 있어요.",
+        );
+        router.replace(
+          `/courses/${doc.courseOfferingId}`,
+        );
+        router.refresh();
+      } catch (error) {
+        console.error(
+          "게시글 게시 중단 실패:",
+          error,
+        );
+
+        alert(
+          error instanceof Error
+            ? `게시글을 게시 중단하지 못했습니다.\n${error.message}`
+            : "게시글을 게시 중단하지 못했습니다.",
+        );
+      } finally {
+        setIsDeletingPost(false);
+      }
+
+      return;
+    }
+
     const confirmed = window.confirm(
-      "게시글을 삭제할까요?\n삭제한 글은 되돌릴 수 없습니다.",
+      "아직 구매자가 없는 글입니다.\n게시글을 완전히 삭제할까요?\n삭제한 글은 되돌릴 수 없습니다.",
     );
 
     if (!confirmed) {
@@ -1034,10 +1139,10 @@ export default function DocumentPage() {
       previous.map((item) =>
         item.id === commentId
           ? {
-              ...item,
-              text: nextContent,
-              isEdited: true,
-            }
+            ...item,
+            text: nextContent,
+            isEdited: true,
+          }
           : item,
       ),
     );
@@ -1097,9 +1202,9 @@ export default function DocumentPage() {
         previous.map((item) =>
           item.id === targetComment.id
             ? {
-                ...item,
-                hasReplies: true,
-              }
+              ...item,
+              hasReplies: true,
+            }
             : item,
         ),
       );
@@ -1196,29 +1301,6 @@ export default function DocumentPage() {
     }
   }
 
-  const renderPara = (text: string, i: number) => {
-    const lines = text.split('\n')
-    return (
-      <div key={i}>
-        {lines.map((line, j) => {
-          if (line.startsWith('## ')) return (
-            <h3 key={j} style={{ fontSize: 16, fontWeight: 600, margin: '30px 0 13px', color: 'var(--cs-ink)', letterSpacing: '-0.01em' }}>
-              {line.slice(3)}
-            </h3>
-          )
-          if (line.startsWith('- ')) return (
-            <li key={j} style={{ fontSize: 15.5, lineHeight: 1.85, color: 'var(--cs-ink-body)', marginLeft: 20 }}
-              dangerouslySetInnerHTML={{ __html: line.slice(2).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }}
-            />
-          )
-          if (line === '') return <div key={j} style={{ height: 10 }} />
-          return <p key={j} style={{ fontSize: 15.5, lineHeight: 1.85, margin: '0 0 20px', color: 'var(--cs-ink-body)' }}
-            dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }}
-          />
-        })}
-      </div>
-    )
-  }
 
   if (isLoading) {
     return (
@@ -1239,8 +1321,6 @@ export default function DocumentPage() {
       </div>
     );
   }
-
-  const body = splitParagraphs(doc.content);
 
   const canAccessPaidContent =
     doc.authorId === userId ||
@@ -1275,21 +1355,6 @@ export default function DocumentPage() {
         {/* Byline */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 13, fontSize: 12.5, color: 'var(--cs-ink-faint)', paddingBottom: 20, borderBottom: '1px solid var(--cs-border)' }}>
           <TagChip tag={doc.tag} size="md" />
-          <span
-              style={{
-                padding: "3px 7px",
-                borderRadius:
-                  "var(--cs-radius-tag)",
-                background:
-                  "var(--cs-purple-bg)",
-                color:
-                  "var(--cs-purple-dark)",
-                fontSize: 11,
-                fontWeight: 600,
-              }}
-            >
-              1P
-            </span>
           <span>{doc.author} · {doc.timeAgo} · {subject.professor} 교수님 {subject.semester}학기</span>
           <div
             style={{
@@ -1328,7 +1393,11 @@ export default function DocumentPage() {
                   onClick={() =>
                     void deletePost()
                   }
-                  disabled={isDeletingPost}
+                  disabled={
+                    isDeletingPost ||
+                    (purchaseCount > 0 &&
+                      !doc.isPublished)
+                  }
                   style={{
                     fontSize: 12,
                     color:
@@ -1340,18 +1409,30 @@ export default function DocumentPage() {
                     padding: "5px 10px",
                     borderRadius:
                       "var(--cs-radius-md)",
-                    cursor: isDeletingPost
-                      ? "not-allowed"
-                      : "pointer",
+                    cursor:
+                      isDeletingPost ||
+                        (purchaseCount > 0 &&
+                          !doc.isPublished)
+                        ? "not-allowed"
+                        : "pointer",
                     fontFamily: "inherit",
-                    opacity: isDeletingPost
-                      ? 0.6
-                      : 1,
+                    opacity:
+                      isDeletingPost ||
+                        (purchaseCount > 0 &&
+                          !doc.isPublished)
+                        ? 0.6
+                        : 1,
                   }}
                 >
                   {isDeletingPost
-                    ? "삭제 중..."
-                    : "삭제"}
+                    ? purchaseCount > 0
+                      ? "중단 중..."
+                      : "삭제 중..."
+                    : purchaseCount > 0
+                      ? doc.isPublished
+                        ? "게시 중단"
+                        : "게시 중단됨"
+                      : "삭제"}
                 </button>
               </>
             )}
@@ -1367,11 +1448,10 @@ export default function DocumentPage() {
                 background: bookmarked
                   ? "var(--cs-purple-bg)"
                   : "var(--cs-surface)",
-                border: `1px solid ${
-                  bookmarked
+                border: `1px solid ${bookmarked
                     ? "var(--cs-purple-border)"
                     : "var(--cs-border-str)"
-                }`,
+                  }`,
                 padding: "5px 11px",
                 borderRadius:
                   "var(--cs-radius-md)",
@@ -1388,17 +1468,16 @@ export default function DocumentPage() {
         {/* Body */}
         {canAccessPaidContent ? (
           <div
+            className={editorStyles.proseMirror}
             style={{
-              fontSize: 15.5,
-              lineHeight: 1.85,
-              color:
-                "var(--cs-ink-body)",
+              marginTop: 24,
+              minHeight: 0,
+              padding: 0,
             }}
-          >
-            {body.map((para, i) =>
-              renderPara(para, i),
-            )}
-          </div>
+            dangerouslySetInnerHTML={{
+              __html: doc.content,
+            }}
+          />
         ) : (
           <section
             style={{
@@ -1421,7 +1500,9 @@ export default function DocumentPage() {
                 fontWeight: 700,
               }}
             >
-              유료 자료입니다
+              {doc.isPublished
+                ? "유료 자료입니다"
+                : "게시 중단된 자료입니다"}
             </div>
 
             <p
@@ -1434,459 +1515,472 @@ export default function DocumentPage() {
                 lineHeight: 1.7,
               }}
             >
-              1포인트를 결제하면
-              본문과 첨부파일, 댓글을 볼 수
-              있어요.
-              <br />
-              현재 보유 포인트는{" "}
-              {walletBalance}P입니다.
+              {doc.isPublished ? (
+                <>
+                  1포인트를 결제하면
+                  본문과 첨부파일, 댓글을 볼 수
+                  있어요.
+                  <br />
+                  현재 보유 포인트는{" "}
+                  {walletBalance}P입니다.
+                </>
+              ) : (
+                <>
+                  작성자가 게시를 중단해
+                  새로운 구매는 할 수 없어요.
+                  <br />
+                  기존 구매자는 계속 열람할 수 있습니다.
+                </>
+              )}
             </p>
 
-            <button
-              type="button"
-              onClick={() =>
-                void purchasePost()
-              }
-              disabled={
-                isPurchasing ||
-                walletBalance < 1
-              }
-              style={{
-                border: 0,
-                borderRadius:
-                  "var(--cs-radius-md)",
-                padding:
-                  "9px 18px",
-                background:
-                  "var(--cs-purple)",
-                color:
-                  "var(--cs-surface)",
-                fontFamily:
-                  "inherit",
-                fontSize: 13,
-                fontWeight: 700,
-                cursor:
+            {doc.isPublished && (
+              <button
+                type="button"
+                onClick={() =>
+                  void purchasePost()
+                }
+                disabled={
                   isPurchasing ||
                   walletBalance < 1
-                    ? "not-allowed"
-                    : "pointer",
-                opacity:
-                  walletBalance < 1
-                    ? 0.55
-                    : 1,
-              }}
-            >
-              {isPurchasing
-                ? "구매 중..."
-                : walletBalance < 1
-                  ? "포인트가 부족해요"
-                  : "1P로 구매하기"}
-            </button>
+                }
+                style={{
+                  border: 0,
+                  borderRadius:
+                    "var(--cs-radius-md)",
+                  padding:
+                    "9px 18px",
+                  background:
+                    "var(--cs-purple)",
+                  color:
+                    "var(--cs-surface)",
+                  fontFamily:
+                    "inherit",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor:
+                    isPurchasing ||
+                      walletBalance < 1
+                      ? "not-allowed"
+                      : "pointer",
+                  opacity:
+                    walletBalance < 1
+                      ? 0.55
+                      : 1,
+                }}
+              >
+                {isPurchasing
+                  ? "구매 중..."
+                  : walletBalance < 1
+                    ? "포인트가 부족해요"
+                    : "1P로 구매하기"}
+              </button>
+            )}
           </section>
         )}
 
         {/* Attachments */}
         {canAccessPaidContent &&
           attachments.length > 0 && (
-          <section
-            style={{
-              marginTop: 30,
-              padding: 18,
-              border:
-                "1px solid #ded9ee",
-              borderRadius: 10,
-              background:
-                "var(--cs-surface)",
-            }}
-          >
-            <div
+            <section
               style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent:
-                  "space-between",
-                gap: 12,
-                marginBottom: 12,
+                marginTop: 30,
+                padding: 18,
+                border:
+                  "1px solid #ded9ee",
+                borderRadius: 10,
+                background:
+                  "var(--cs-surface)",
               }}
             >
-              <div>
-                <h2
-                  style={{
-                    margin: "0 0 4px",
-                    color:
-                      "var(--cs-ink)",
-                    fontSize: 13,
-                    fontWeight: 700,
-                  }}
-                >
-                  첨부파일
-                </h2>
-
-                <p
-                  style={{
-                    margin: 0,
-                    color:
-                      "var(--cs-ink-faint)",
-                    fontSize: 10.5,
-                  }}
-                >
-                  파일명을 눌러 다운로드할 수
-                  있어요.
-                </p>
-              </div>
-
-              <span
+              <div
                 style={{
-                  color:
-                    "var(--cs-ink-faint)",
-                  fontSize: 11,
-                  fontWeight: 600,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent:
+                    "space-between",
+                  gap: 12,
+                  marginBottom: 12,
                 }}
               >
-                {attachments.length}개
-              </span>
+                <div>
+                  <h2
+                    style={{
+                      margin: "0 0 4px",
+                      color:
+                        "var(--cs-ink)",
+                      fontSize: 13,
+                      fontWeight: 700,
+                    }}
+                  >
+                    첨부파일
+                  </h2>
+
+                  <p
+                    style={{
+                      margin: 0,
+                      color:
+                        "var(--cs-ink-faint)",
+                      fontSize: 10.5,
+                    }}
+                  >
+                    파일명을 눌러 다운로드할 수
+                    있어요.
+                  </p>
+                </div>
+
+                <span
+                  style={{
+                    color:
+                      "var(--cs-ink-faint)",
+                    fontSize: 11,
+                    fontWeight: 600,
+                  }}
+                >
+                  {attachments.length}개
+                </span>
+              </div>
+
+              <ul
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                  margin: 0,
+                  padding: 0,
+                  listStyle: "none",
+                }}
+              >
+                {attachments.map(
+                  (attachment) => {
+                    const isDownloading =
+                      downloadingAttachmentId ===
+                      attachment.id;
+
+                    return (
+                      <li
+                        key={attachment.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent:
+                            "space-between",
+                          gap: 12,
+                          minHeight: 58,
+                          padding:
+                            "9px 11px",
+                          border:
+                            "1px solid #e5e1f0",
+                          borderRadius: 8,
+                          background:
+                            "#ffffff",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems:
+                              "center",
+                            gap: 10,
+                            minWidth: 0,
+                          }}
+                        >
+                          <span
+                            style={{
+                              display: "flex",
+                              width: 38,
+                              height: 38,
+                              flexShrink: 0,
+                              alignItems:
+                                "center",
+                              justifyContent:
+                                "center",
+                              borderRadius: 7,
+                              background:
+                                "#f0edf8",
+                              color:
+                                "var(--cs-purple-dark)",
+                              fontSize: 9,
+                              fontWeight: 800,
+                              textTransform:
+                                "uppercase",
+                            }}
+                          >
+                            {getFileExtension(
+                              attachment.originalName,
+                            )}
+                          </span>
+
+                          <span
+                            style={{
+                              display: "flex",
+                              flexDirection:
+                                "column",
+                              gap: 4,
+                              minWidth: 0,
+                            }}
+                          >
+                            <strong
+                              style={{
+                                overflow:
+                                  "hidden",
+                                color:
+                                  "var(--cs-ink)",
+                                fontSize: 11.5,
+                                fontWeight: 650,
+                                textOverflow:
+                                  "ellipsis",
+                                whiteSpace:
+                                  "nowrap",
+                              }}
+                            >
+                              {
+                                attachment.originalName
+                              }
+                            </strong>
+
+                            <small
+                              style={{
+                                color:
+                                  "var(--cs-ink-faint)",
+                                fontSize: 10,
+                              }}
+                            >
+                              {formatFileSize(
+                                attachment.sizeBytes,
+                              )}
+                            </small>
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void downloadAttachment(
+                              attachment,
+                            )
+                          }
+                          disabled={
+                            Boolean(
+                              downloadingAttachmentId,
+                            )
+                          }
+                          style={{
+                            flexShrink: 0,
+                            border:
+                              "1px solid var(--cs-border-str)",
+                            borderRadius:
+                              "var(--cs-radius-md)",
+                            background:
+                              "var(--cs-surface)",
+                            color:
+                              "var(--cs-purple-dark)",
+                            padding:
+                              "6px 10px",
+                            fontFamily:
+                              "inherit",
+                            fontSize: 11,
+                            fontWeight: 600,
+                            cursor:
+                              downloadingAttachmentId
+                                ? "not-allowed"
+                                : "pointer",
+                            opacity:
+                              downloadingAttachmentId &&
+                                !isDownloading
+                                ? 0.55
+                                : 1,
+                          }}
+                        >
+                          {isDownloading
+                            ? "준비 중..."
+                            : "다운로드"}
+                        </button>
+                      </li>
+                    );
+                  },
+                )}
+              </ul>
+            </section>
+          )}
+
+        {/* Comments */}
+        {canAccessPaidContent && (
+          <div style={{ borderTop: '1px solid var(--cs-border)', marginTop: 32, paddingTop: 20 }}>
+            {/* Like + Share above comment input */}
+            <div style={{ display: 'flex', gap: 7, marginBottom: 16 }}>
+              <button
+                onClick={toggleLike}
+                style={{
+                  fontSize: 12.5, color: liked ? 'var(--cs-purple-dark)' : 'var(--cs-ink-soft)',
+                  background: liked ? 'var(--cs-purple-bg)' : 'var(--cs-surface)',
+                  border: `1px solid ${liked ? 'var(--cs-purple-border)' : 'var(--cs-border-str)'}`,
+                  padding: '6px 11px', borderRadius: 'var(--cs-radius-md)',
+                  cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s',
+                }}
+              >
+                {liked ? '♥' : '♡'} 좋아요 {likeCount}
+              </button>
+              <button style={{
+                fontSize: 12.5, color: 'var(--cs-ink-soft)',
+                background: 'var(--cs-surface)', border: '1px solid var(--cs-border-str)',
+                padding: '6px 11px', borderRadius: 'var(--cs-radius-md)',
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}>
+                공유
+              </button>
+            </div>
+            <div style={{ fontSize: 12.5, color: 'var(--cs-ink-soft)', fontWeight: 500, marginBottom: 16 }}>
+              댓글 {comments.length}
             </div>
 
-            <ul
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 8,
-                margin: 0,
-                padding: 0,
-                listStyle: "none",
-              }}
-            >
-              {attachments.map(
-                (attachment) => {
-                  const isDownloading =
-                    downloadingAttachmentId ===
-                    attachment.id;
+            {comments.map((c) => {
+              const isMine =
+                c.authorId === userId;
+              const isEditing =
+                editingCommentId === c.id;
 
-                  return (
-                    <li
-                      key={attachment.id}
+              return (
+                <div
+                  key={c.id}
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    marginBottom: 18,
+                    marginLeft:
+                      c.parentCommentId
+                        ? 28
+                        : 0,
+                  }}
+                >
+                  {c.parentCommentId && (
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        width: 14,
+                        flexShrink: 0,
+                        color:
+                          "var(--cs-ink-faint)",
+                        fontSize: 13,
+                        lineHeight:
+                          "28px",
+                      }}
+                    >
+                      ↳
+                    </span>
+                  )}
+
+                  <div
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius:
+                        "var(--cs-radius-full)",
+                      flexShrink: 0,
+                      overflow: "hidden",
+                      background: c.anon
+                        ? "var(--cs-sunk)"
+                        : "var(--cs-purple-bg)",
+                      color: c.anon
+                        ? "var(--cs-ink-faint)"
+                        : "var(--cs-purple-dark)",
+                      fontSize: 11,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent:
+                        "center",
+                      fontWeight: 500,
+                    }}
+                  >
+                    {!c.anon &&
+                      c.avatarUrl ? (
+                      <img
+                        src={c.avatarUrl}
+                        alt={`${c.author} 프로필`}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                          display: "block",
+                        }}
+                      />
+                    ) : (
+                      c.initial
+                    )}
+                  </div>
+
+                  <div
+                    style={{
+                      minWidth: 0,
+                      flex: 1,
+                    }}
+                  >
+                    <div
                       style={{
                         display: "flex",
                         alignItems: "center",
-                        justifyContent:
-                          "space-between",
-                        gap: 12,
-                        minHeight: 58,
-                        padding:
-                          "9px 11px",
-                        border:
-                          "1px solid #e5e1f0",
-                        borderRadius: 8,
-                        background:
-                          "#ffffff",
+                        gap: 7,
                       }}
                     >
                       <div
                         style={{
-                          display: "flex",
-                          alignItems:
-                            "center",
-                          gap: 10,
-                          minWidth: 0,
+                          fontSize: 12.5,
+                          fontWeight: 500,
+                          color:
+                            "var(--cs-ink)",
                         }}
                       >
+                        {c.author} ·{" "}
                         <span
                           style={{
-                            display: "flex",
-                            width: 38,
-                            height: 38,
-                            flexShrink: 0,
-                            alignItems:
-                              "center",
-                            justifyContent:
-                              "center",
-                            borderRadius: 7,
-                            background:
-                              "#f0edf8",
+                            fontWeight: 400,
                             color:
-                              "var(--cs-purple-dark)",
-                            fontSize: 9,
-                            fontWeight: 800,
-                            textTransform:
-                              "uppercase",
+                              "var(--cs-ink-faint)",
                           }}
                         >
-                          {getFileExtension(
-                            attachment.originalName,
+                          {c.time}
+                          {c.isEdited && (
+                            <>
+                              {" · "}
+                              수정됨
+                            </>
                           )}
-                        </span>
-
-                        <span
-                          style={{
-                            display: "flex",
-                            flexDirection:
-                              "column",
-                            gap: 4,
-                            minWidth: 0,
-                          }}
-                        >
-                          <strong
-                            style={{
-                              overflow:
-                                "hidden",
-                              color:
-                                "var(--cs-ink)",
-                              fontSize: 11.5,
-                              fontWeight: 650,
-                              textOverflow:
-                                "ellipsis",
-                              whiteSpace:
-                                "nowrap",
-                            }}
-                          >
-                            {
-                              attachment.originalName
-                            }
-                          </strong>
-
-                          <small
-                            style={{
-                              color:
-                                "var(--cs-ink-faint)",
-                              fontSize: 10,
-                            }}
-                          >
-                            {formatFileSize(
-                              attachment.sizeBytes,
-                            )}
-                          </small>
                         </span>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void downloadAttachment(
-                            attachment,
-                          )
-                        }
-                        disabled={
-                          Boolean(
-                            downloadingAttachmentId,
-                          )
-                        }
+                      <div
                         style={{
-                          flexShrink: 0,
-                          border:
-                            "1px solid var(--cs-border-str)",
-                          borderRadius:
-                            "var(--cs-radius-md)",
-                          background:
-                            "var(--cs-surface)",
-                          color:
-                            "var(--cs-purple-dark)",
-                          padding:
-                            "6px 10px",
-                          fontFamily:
-                            "inherit",
-                          fontSize: 11,
-                          fontWeight: 600,
-                          cursor:
-                            downloadingAttachmentId
-                              ? "not-allowed"
-                              : "pointer",
-                          opacity:
-                            downloadingAttachmentId &&
-                            !isDownloading
-                              ? 0.55
-                              : 1,
+                          marginLeft: "auto",
+                          display: "flex",
+                          gap: 6,
                         }}
                       >
-                        {isDownloading
-                          ? "준비 중..."
-                          : "다운로드"}
-                      </button>
-                    </li>
-                  );
-                },
-              )}
-            </ul>
-          </section>
-        )}
-
-        {/* Comments */}
-        {canAccessPaidContent && (
-        <div style={{ borderTop: '1px solid var(--cs-border)', marginTop: 32, paddingTop: 20 }}>
-          {/* Like + Share above comment input */}
-          <div style={{ display: 'flex', gap: 7, marginBottom: 16 }}>
-            <button
-              onClick={toggleLike}
-              style={{
-                fontSize: 12.5, color: liked ? 'var(--cs-purple-dark)' : 'var(--cs-ink-soft)',
-                background: liked ? 'var(--cs-purple-bg)' : 'var(--cs-surface)',
-                border: `1px solid ${liked ? 'var(--cs-purple-border)' : 'var(--cs-border-str)'}`,
-                padding: '6px 11px', borderRadius: 'var(--cs-radius-md)',
-                cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s',
-              }}
-            >
-              {liked ? '♥' : '♡'} 좋아요 {likeCount}
-            </button>
-            <button style={{
-              fontSize: 12.5, color: 'var(--cs-ink-soft)',
-              background: 'var(--cs-surface)', border: '1px solid var(--cs-border-str)',
-              padding: '6px 11px', borderRadius: 'var(--cs-radius-md)',
-              cursor: 'pointer', fontFamily: 'inherit',
-            }}>
-              공유
-            </button>
-          </div>
-          <div style={{ fontSize: 12.5, color: 'var(--cs-ink-soft)', fontWeight: 500, marginBottom: 16 }}>
-            댓글 {comments.length}
-          </div>
-
-          {comments.map((c) => {
-            const isMine =
-              c.authorId === userId;
-            const isEditing =
-              editingCommentId === c.id;
-
-            return (
-              <div
-                key={c.id}
-                style={{
-                  display: "flex",
-                  gap: 10,
-                  marginBottom: 18,
-                  marginLeft:
-                    c.parentCommentId
-                      ? 28
-                      : 0,
-                }}
-              >
-                {c.parentCommentId && (
-                  <span
-                    aria-hidden="true"
-                    style={{
-                      width: 14,
-                      flexShrink: 0,
-                      color:
-                        "var(--cs-ink-faint)",
-                      fontSize: 13,
-                      lineHeight:
-                        "28px",
-                    }}
-                  >
-                    ↳
-                  </span>
-                )}
-
-                <div
-                  style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius:
-                      "var(--cs-radius-full)",
-                    flexShrink: 0,
-                    overflow: "hidden",
-                    background: c.anon
-                      ? "var(--cs-sunk)"
-                      : "var(--cs-purple-bg)",
-                    color: c.anon
-                      ? "var(--cs-ink-faint)"
-                      : "var(--cs-purple-dark)",
-                    fontSize: 11,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent:
-                      "center",
-                    fontWeight: 500,
-                  }}
-                >
-                  {!c.anon &&
-                  c.avatarUrl ? (
-                    <img
-                      src={c.avatarUrl}
-                      alt={`${c.author} 프로필`}
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "cover",
-                        display: "block",
-                      }}
-                    />
-                  ) : (
-                    c.initial
-                  )}
-                </div>
-
-                <div
-                  style={{
-                    minWidth: 0,
-                    flex: 1,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 7,
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: 12.5,
-                        fontWeight: 500,
-                        color:
-                          "var(--cs-ink)",
-                      }}
-                    >
-                      {c.author} ·{" "}
-                      <span
-                        style={{
-                          fontWeight: 400,
-                          color:
-                            "var(--cs-ink-faint)",
-                        }}
-                      >
-                        {c.time}
-                        {c.isEdited && (
-                          <>
-                            {" · "}
-                            수정됨
-                          </>
-                        )}
-                      </span>
-                    </div>
-
-                    <div
-                      style={{
-                        marginLeft: "auto",
-                        display: "flex",
-                        gap: 6,
-                      }}
-                    >
                         {isMine &&
                           !isEditing && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              startEditingComment(
-                                c,
-                              )
-                            }
-                            style={{
-                              padding: 0,
-                              border: 0,
-                              background:
-                                "transparent",
-                              color:
-                                "var(--cs-ink-faint)",
-                              fontFamily:
-                                "inherit",
-                              fontSize: 11,
-                              cursor:
-                                "pointer",
-                            }}
-                          >
-                            수정
-                          </button>
-                        )}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                startEditingComment(
+                                  c,
+                                )
+                              }
+                              style={{
+                                padding: 0,
+                                border: 0,
+                                background:
+                                  "transparent",
+                                color:
+                                  "var(--cs-ink-faint)",
+                                fontFamily:
+                                  "inherit",
+                                fontSize: 11,
+                                cursor:
+                                  "pointer",
+                              }}
+                            >
+                              수정
+                            </button>
+                          )}
 
                         {!isEditing && (
                           <button
@@ -1940,274 +2034,63 @@ export default function DocumentPage() {
                             </button>
                           )}
                       </div>
-                  </div>
-
-                  {isEditing ? (
-                    <div
-                      style={{
-                        marginTop: 7,
-                      }}
-                    >
-                      <textarea
-                        value={
-                          editingCommentText
-                        }
-                        onChange={(event) =>
-                          setEditingCommentText(
-                            event.target
-                              .value,
-                          )
-                        }
-                        rows={3}
-                        autoFocus
-                        style={{
-                          width: "100%",
-                          resize:
-                            "vertical",
-                          boxSizing:
-                            "border-box",
-                          padding:
-                            "9px 10px",
-                          border:
-                            "1px solid var(--cs-purple-border)",
-                          borderRadius:
-                            "var(--cs-radius-md)",
-                          outline: "none",
-                          background:
-                            "var(--cs-surface)",
-                          color:
-                            "var(--cs-ink)",
-                          fontFamily:
-                            "inherit",
-                          fontSize: 13,
-                          lineHeight: 1.6,
-                        }}
-                      />
-
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent:
-                            "flex-end",
-                          gap: 6,
-                          marginTop: 6,
-                        }}
-                      >
-                        <button
-                          type="button"
-                          onClick={
-                            cancelEditingComment
-                          }
-                          style={{
-                            padding:
-                              "5px 9px",
-                            border:
-                              "1px solid var(--cs-border-str)",
-                            borderRadius:
-                              "var(--cs-radius-md)",
-                            background:
-                              "var(--cs-surface)",
-                            color:
-                              "var(--cs-ink-soft)",
-                            fontFamily:
-                              "inherit",
-                            fontSize: 11,
-                            cursor:
-                              "pointer",
-                          }}
-                        >
-                          취소
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void saveEditedComment(
-                              c.id,
-                            )
-                          }
-                          disabled={
-                            !editingCommentText.trim()
-                          }
-                          style={{
-                            padding:
-                              "5px 9px",
-                            border: 0,
-                            borderRadius:
-                              "var(--cs-radius-md)",
-                            background:
-                              "var(--cs-purple)",
-                            color:
-                              "var(--cs-surface)",
-                            fontFamily:
-                              "inherit",
-                            fontSize: 11,
-                            cursor:
-                              editingCommentText.trim()
-                                ? "pointer"
-                                : "not-allowed",
-                            opacity:
-                              editingCommentText.trim()
-                                ? 1
-                                : 0.55,
-                          }}
-                        >
-                          저장
-                        </button>
-                      </div>
                     </div>
-                  ) : (
-                    <div
-                      style={{
-                        fontSize: 14,
-                        lineHeight: 1.7,
-                        marginTop: 4,
-                        color:
-                          "var(--cs-ink-body)",
-                        whiteSpace:
-                          "pre-wrap",
-                      }}
-                    >
-                      {c.text}
-                    </div>
-                  )}
 
-                  {replyingToId === c.id && (
-                    <div
-                      style={{
-                        marginTop: 10,
-                        padding: 10,
-                        border:
-                          "1px solid var(--cs-purple-border)",
-                        borderRadius:
-                          "var(--cs-radius-md)",
-                        background:
-                          "var(--cs-purple-bg)",
-                      }}
-                    >
+                    {isEditing ? (
                       <div
                         style={{
-                          marginBottom: 7,
-                          color:
-                            "var(--cs-purple-dark)",
-                          fontSize: 11,
-                          fontWeight: 600,
-                        }}
-                      >
-                        {c.author}님에게 답글
-                      </div>
-
-                      <textarea
-                        value={replyText}
-                        onChange={(event) =>
-                          setReplyText(
-                            event.target.value,
-                          )
-                        }
-                        onKeyDown={(event) => {
-                          if (
-                            event.key ===
-                              "Enter" &&
-                            (event.ctrlKey ||
-                              event.metaKey)
-                          ) {
-                            event.preventDefault();
-                            void addReply(c.id);
-                          }
-                        }}
-                        rows={3}
-                        autoFocus
-                        placeholder="답글을 입력하세요..."
-                        disabled={
-                          isSubmittingReply
-                        }
-                        style={{
-                          width: "100%",
-                          boxSizing:
-                            "border-box",
-                          resize:
-                            "vertical",
-                          padding:
-                            "9px 10px",
-                          border:
-                            "1px solid var(--cs-border-str)",
-                          borderRadius:
-                            "var(--cs-radius-md)",
-                          outline: "none",
-                          background:
-                            "var(--cs-surface)",
-                          color:
-                            "var(--cs-ink)",
-                          fontFamily:
-                            "inherit",
-                          fontSize: 13,
-                          lineHeight: 1.6,
-                        }}
-                      />
-
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems:
-                            "center",
-                          justifyContent:
-                            "space-between",
-                          gap: 8,
                           marginTop: 7,
                         }}
                       >
-                        <label
+                        <textarea
+                          value={
+                            editingCommentText
+                          }
+                          onChange={(event) =>
+                            setEditingCommentText(
+                              event.target
+                                .value,
+                            )
+                          }
+                          rows={3}
+                          autoFocus
                           style={{
-                            display: "flex",
-                            alignItems:
-                              "center",
-                            gap: 5,
+                            width: "100%",
+                            resize:
+                              "vertical",
+                            boxSizing:
+                              "border-box",
+                            padding:
+                              "9px 10px",
+                            border:
+                              "1px solid var(--cs-purple-border)",
+                            borderRadius:
+                              "var(--cs-radius-md)",
+                            outline: "none",
+                            background:
+                              "var(--cs-surface)",
                             color:
-                              "var(--cs-ink-soft)",
-                            fontSize: 11,
-                            cursor:
-                              "pointer",
+                              "var(--cs-ink)",
+                            fontFamily:
+                              "inherit",
+                            fontSize: 13,
+                            lineHeight: 1.6,
                           }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={
-                              replyAnonymous
-                            }
-                            onChange={(
-                              event,
-                            ) =>
-                              setReplyAnonymous(
-                                event.target
-                                  .checked,
-                              )
-                            }
-                            disabled={
-                              isSubmittingReply
-                            }
-                            style={{
-                              width: 13,
-                              height: 13,
-                              accentColor:
-                                "var(--cs-purple)",
-                            }}
-                          />
-                          익명으로 쓰기
-                        </label>
+                        />
 
                         <div
                           style={{
                             display: "flex",
+                            justifyContent:
+                              "flex-end",
                             gap: 6,
+                            marginTop: 6,
                           }}
                         >
                           <button
                             type="button"
                             onClick={
-                              cancelReply
-                            }
-                            disabled={
-                              isSubmittingReply
+                              cancelEditingComment
                             }
                             style={{
                               padding:
@@ -2233,17 +2116,16 @@ export default function DocumentPage() {
                           <button
                             type="button"
                             onClick={() =>
-                              void addReply(
+                              void saveEditedComment(
                                 c.id,
                               )
                             }
                             disabled={
-                              !replyText.trim() ||
-                              isSubmittingReply
+                              !editingCommentText.trim()
                             }
                             style={{
                               padding:
-                                "5px 10px",
+                                "5px 9px",
                               border: 0,
                               borderRadius:
                                 "var(--cs-radius-md)",
@@ -2254,74 +2136,286 @@ export default function DocumentPage() {
                               fontFamily:
                                 "inherit",
                               fontSize: 11,
-                              fontWeight: 600,
                               cursor:
-                                !replyText.trim() ||
-                                isSubmittingReply
-                                  ? "not-allowed"
-                                  : "pointer",
+                                editingCommentText.trim()
+                                  ? "pointer"
+                                  : "not-allowed",
                               opacity:
-                                !replyText.trim() ||
-                                isSubmittingReply
-                                  ? 0.55
-                                  : 1,
+                                editingCommentText.trim()
+                                  ? 1
+                                  : 0.55,
                             }}
                           >
-                            {isSubmittingReply
-                              ? "등록 중..."
-                              : "답글 등록"}
+                            저장
                           </button>
                         </div>
                       </div>
-                    </div>
-                  )}
-
-                  {isMine &&
-                    c.hasReplies && (
+                    ) : (
                       <div
                         style={{
-                          marginTop: 5,
+                          fontSize: 14,
+                          lineHeight: 1.7,
+                          marginTop: 4,
                           color:
-                            "var(--cs-ink-faint)",
-                          fontSize: 10.5,
+                            "var(--cs-ink-body)",
+                          whiteSpace:
+                            "pre-wrap",
                         }}
                       >
-                        답글이 있어 삭제할 수
-                        없습니다.
+                        {c.text}
                       </div>
                     )}
-                </div>
-              </div>
-            );
-          })}
 
-          {/* Comment input */}
-          <div style={{
-            border: '1px solid var(--cs-border-str)', borderRadius: 'var(--cs-radius-lg)', padding: '11px 13px',
-            fontSize: 13, color: 'var(--cs-ink-faint)', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            background: 'var(--cs-surface)',
-          }}>
-            <input
-              value={comment}
-              onChange={e => setComment(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') addComment() }}
-              placeholder="댓글을 남겨보세요..."
-              style={{
-                border: 'none', outline: 'none', background: 'none',
-                fontSize: 13, fontFamily: 'inherit', color: 'var(--cs-ink)', flex: 1,
-              }}
-            />
-            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: 'var(--cs-ink-soft)', cursor: 'pointer', flexShrink: 0, marginLeft: 12 }}>
+                    {replyingToId === c.id && (
+                      <div
+                        style={{
+                          marginTop: 10,
+                          padding: 10,
+                          border:
+                            "1px solid var(--cs-purple-border)",
+                          borderRadius:
+                            "var(--cs-radius-md)",
+                          background:
+                            "var(--cs-purple-bg)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            marginBottom: 7,
+                            color:
+                              "var(--cs-purple-dark)",
+                            fontSize: 11,
+                            fontWeight: 600,
+                          }}
+                        >
+                          {c.author}님에게 답글
+                        </div>
+
+                        <textarea
+                          value={replyText}
+                          onChange={(event) =>
+                            setReplyText(
+                              event.target.value,
+                            )
+                          }
+                          onKeyDown={(event) => {
+                            if (
+                              event.key ===
+                              "Enter" &&
+                              (event.ctrlKey ||
+                                event.metaKey)
+                            ) {
+                              event.preventDefault();
+                              void addReply(c.id);
+                            }
+                          }}
+                          rows={3}
+                          autoFocus
+                          placeholder="답글을 입력하세요..."
+                          disabled={
+                            isSubmittingReply
+                          }
+                          style={{
+                            width: "100%",
+                            boxSizing:
+                              "border-box",
+                            resize:
+                              "vertical",
+                            padding:
+                              "9px 10px",
+                            border:
+                              "1px solid var(--cs-border-str)",
+                            borderRadius:
+                              "var(--cs-radius-md)",
+                            outline: "none",
+                            background:
+                              "var(--cs-surface)",
+                            color:
+                              "var(--cs-ink)",
+                            fontFamily:
+                              "inherit",
+                            fontSize: 13,
+                            lineHeight: 1.6,
+                          }}
+                        />
+
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems:
+                              "center",
+                            justifyContent:
+                              "space-between",
+                            gap: 8,
+                            marginTop: 7,
+                          }}
+                        >
+                          <label
+                            style={{
+                              display: "flex",
+                              alignItems:
+                                "center",
+                              gap: 5,
+                              color:
+                                "var(--cs-ink-soft)",
+                              fontSize: 11,
+                              cursor:
+                                "pointer",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={
+                                replyAnonymous
+                              }
+                              onChange={(
+                                event,
+                              ) =>
+                                setReplyAnonymous(
+                                  event.target
+                                    .checked,
+                                )
+                              }
+                              disabled={
+                                isSubmittingReply
+                              }
+                              style={{
+                                width: 13,
+                                height: 13,
+                                accentColor:
+                                  "var(--cs-purple)",
+                              }}
+                            />
+                            익명으로 쓰기
+                          </label>
+
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: 6,
+                            }}
+                          >
+                            <button
+                              type="button"
+                              onClick={
+                                cancelReply
+                              }
+                              disabled={
+                                isSubmittingReply
+                              }
+                              style={{
+                                padding:
+                                  "5px 9px",
+                                border:
+                                  "1px solid var(--cs-border-str)",
+                                borderRadius:
+                                  "var(--cs-radius-md)",
+                                background:
+                                  "var(--cs-surface)",
+                                color:
+                                  "var(--cs-ink-soft)",
+                                fontFamily:
+                                  "inherit",
+                                fontSize: 11,
+                                cursor:
+                                  "pointer",
+                              }}
+                            >
+                              취소
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void addReply(
+                                  c.id,
+                                )
+                              }
+                              disabled={
+                                !replyText.trim() ||
+                                isSubmittingReply
+                              }
+                              style={{
+                                padding:
+                                  "5px 10px",
+                                border: 0,
+                                borderRadius:
+                                  "var(--cs-radius-md)",
+                                background:
+                                  "var(--cs-purple)",
+                                color:
+                                  "var(--cs-surface)",
+                                fontFamily:
+                                  "inherit",
+                                fontSize: 11,
+                                fontWeight: 600,
+                                cursor:
+                                  !replyText.trim() ||
+                                    isSubmittingReply
+                                    ? "not-allowed"
+                                    : "pointer",
+                                opacity:
+                                  !replyText.trim() ||
+                                    isSubmittingReply
+                                    ? 0.55
+                                    : 1,
+                              }}
+                            >
+                              {isSubmittingReply
+                                ? "등록 중..."
+                                : "답글 등록"}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {isMine &&
+                      c.hasReplies && (
+                        <div
+                          style={{
+                            marginTop: 5,
+                            color:
+                              "var(--cs-ink-faint)",
+                            fontSize: 10.5,
+                          }}
+                        >
+                          답글이 있어 삭제할 수
+                          없습니다.
+                        </div>
+                      )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Comment input */}
+            <div style={{
+              border: '1px solid var(--cs-border-str)', borderRadius: 'var(--cs-radius-lg)', padding: '11px 13px',
+              fontSize: 13, color: 'var(--cs-ink-faint)', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              background: 'var(--cs-surface)',
+            }}>
               <input
-                type="checkbox"
-                checked={anonymous}
-                onChange={e => setAnonymous(e.target.checked)}
-                style={{ width: 13, height: 13, cursor: 'pointer', accentColor: 'var(--cs-purple)' }}
+                value={comment}
+                onChange={e => setComment(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') addComment() }}
+                placeholder="댓글을 남겨보세요..."
+                style={{
+                  border: 'none', outline: 'none', background: 'none',
+                  fontSize: 13, fontFamily: 'inherit', color: 'var(--cs-ink)', flex: 1,
+                }}
               />
-              익명으로 쓰기
-            </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: 'var(--cs-ink-soft)', cursor: 'pointer', flexShrink: 0, marginLeft: 12 }}>
+                <input
+                  type="checkbox"
+                  checked={anonymous}
+                  onChange={e => setAnonymous(e.target.checked)}
+                  style={{ width: 13, height: 13, cursor: 'pointer', accentColor: 'var(--cs-purple)' }}
+                />
+                익명으로 쓰기
+              </label>
+            </div>
           </div>
-        </div>
         )}
       </div>
     </div>
