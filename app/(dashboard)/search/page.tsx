@@ -14,6 +14,8 @@ type Offering = {
   professor: string;
   dept: string;
   docCount: number;
+  /* [추가] 가장 최근 노트가 올라온 시각 (숫자). 노트가 없으면 0 */
+  lastActivity: number;
   empty: boolean;
 };
 
@@ -28,6 +30,21 @@ type OfferingRow = {
     | { id: string; name: string }
     | { id: string; name: string }[]
     | null;
+};
+
+/* [추가] 정렬 종류 */
+type SortKey = "name" | "count" | "recent";
+
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: "name", label: "가나다순" },
+  { key: "count", label: "자료 많은 순" },
+  { key: "recent", label: "최근 활동 순" },
+];
+
+/* [추가] 분반 하나의 노트 개수 + 마지막 활동 시각 */
+type CountInfo = {
+  count: number;
+  lastActivity: number;
 };
 
 /* Figma 원본 DEPTS 순서 — DB 학과를 이 순서로 먼저 정렬합니다 */
@@ -45,28 +62,47 @@ const NOTE_COUNTS_ENABLED = true;
 
 async function fetchNoteCounts(
   offeringIds: string[],
-): Promise<Record<string, number>> {
+): Promise<Record<string, CountInfo>> {
   if (!NOTE_COUNTS_ENABLED || offeringIds.length === 0) {
     return {};
   }
 
   const { data, error } = await supabase
     .from("posts")
-    .select("course_offering_id")
+    /* [변경] created_at 도 함께 가져옵니다 (최근 활동 순의 재료) */
+    .select("course_offering_id, created_at")
     .in("course_offering_id", offeringIds)
-    .eq("is_published", true);
+    .eq("is_published", true)
+    .eq("is_deleted", false);
 
   if (error) {
     console.error("노트 개수 조회 실패:", error);
     return {};
   }
 
-  const counts: Record<string, number> = {};
+  const counts: Record<string, CountInfo> = {};
 
   (data ?? []).forEach((row) => {
-    const key = (row as { course_offering_id: string })
-      .course_offering_id;
-    counts[key] = (counts[key] ?? 0) + 1;
+    const r = row as {
+      course_offering_id: string;
+      created_at: string;
+    };
+
+    /* new Date(...).getTime() : 날짜를 숫자로 바꿉니다.
+       숫자여야 크기 비교(Math.max)와 정렬이 가능합니다 */
+    const time = new Date(r.created_at).getTime();
+
+    const prev = counts[r.course_offering_id];
+
+    if (prev) {
+      prev.count += 1;
+      prev.lastActivity = Math.max(prev.lastActivity, time);
+    } else {
+      counts[r.course_offering_id] = {
+        count: 1,
+        lastActivity: time,
+      };
+    }
   });
 
   return counts;
@@ -86,6 +122,8 @@ export default function SearchPage() {
   const query = searchParams.get("q") ?? "";
 
   const [dept, setDept] = useState("전체");
+  /* [추가] 현재 선택된 정렬 */
+  const [sort, setSort] = useState<SortKey>("name");
   const [offerings, setOfferings] = useState<Offering[]>([]);
   const [addedIds, setAddedIds] = useState<Set<string>>(
     new Set(),
@@ -152,13 +190,22 @@ export default function SearchPage() {
           const professor = pickOne(row.professors);
 
           const key = `${row.subject_id}__${professor?.id ?? "unknown"}`;
-          const docCount = counts[row.id] ?? 0;
+
+          const info = counts[row.id];
+          const docCount = info?.count ?? 0;
+          const lastActivity = info?.lastActivity ?? 0;
 
           const existing = groupMap.get(key);
 
           if (existing) {
             existing.offeringIds.push(row.id);
+            /* 개수는 더하고 */
             existing.docCount += docCount;
+            /* 활동 시각은 더 최근 것을 남깁니다 */
+            existing.lastActivity = Math.max(
+              existing.lastActivity,
+              lastActivity,
+            );
             existing.empty = existing.docCount === 0;
             return;
           }
@@ -170,6 +217,7 @@ export default function SearchPage() {
             professor: professor?.name ?? "교수 미정",
             dept: subject?.department ?? NO_DEPT_LABEL,
             docCount,
+            lastActivity,
             empty: docCount === 0,
           });
         });
@@ -287,21 +335,53 @@ export default function SearchPage() {
       const matchQuery =
         !q ||
         s.name.toLowerCase().includes(q) ||
-        s.professor.toLowerCase().includes(q);
+        s.professor.toLowerCase().includes(q) ||
+        s.dept.toLowerCase().includes(q);
 
       return matchDept && matchQuery;
     });
   }, [dept, offerings, q]);
+
+  /* [추가] 걸러낸 결과를 정렬합니다 */
+  const sorted = useMemo(() => {
+    /* [...filtered] 로 복사본을 먼저 만듭니다.
+       .sort() 는 원본 배열을 직접 뒤집어버리기 때문에,
+       복사 없이 쓰면 React가 변경을 못 알아채거나 다른 곳이 같이 망가집니다 */
+    const list = [...filtered];
+
+    if (sort === "name") {
+      /* localeCompare(b, "ko") : 한글 가나다순.
+         그냥 > 로 비교하면 유니코드 순서라 결과가 이상해집니다 */
+      list.sort((a, b) => a.name.localeCompare(b.name, "ko"));
+    } else if (sort === "count") {
+      /* b - a : 큰 값이 앞 (내림차순).
+         개수가 같으면 이름순으로 한 번 더 정리 */
+      list.sort(
+        (a, b) =>
+          b.docCount - a.docCount ||
+          a.name.localeCompare(b.name, "ko"),
+      );
+    } else {
+      list.sort(
+        (a, b) =>
+          b.lastActivity - a.lastActivity ||
+          a.name.localeCompare(b.name, "ko"),
+      );
+    }
+
+    return list;
+  }, [filtered, sort]);
 
   const groups = useMemo(() => {
     return depts
       .filter((d) => d !== "전체")
       .map((d) => ({
         dept: d,
-        subjects: filtered.filter((s) => s.dept === d),
+        /* [변경] filtered → sorted */
+        subjects: sorted.filter((s) => s.dept === d),
       }))
       .filter((g) => g.subjects.length > 0);
-  }, [depts, filtered]);
+  }, [depts, sorted]);
 
   return (
     <div style={{ height: '100%', overflowY: 'auto', background: 'var(--cs-surface)' }}>
@@ -311,24 +391,50 @@ export default function SearchPage() {
           전체 과목
         </h1>
 
-        {/* Dept filter chips */}
-        <div style={{ display: 'flex', gap: 7, marginBottom: 24, flexWrap: 'wrap' }}>
-          {depts.map(d => (
-            <button
-              key={d}
-              onClick={() => setDept(d)}
-              style={{
-                fontSize: 12.5, padding: '5px 13px', borderRadius: 'var(--cs-radius-pill)',
-                border: '1px solid',
-                borderColor: dept === d ? 'var(--cs-purple)' : 'var(--cs-border)',
-                background: dept === d ? 'var(--cs-purple-bg)' : 'var(--cs-surface)',
-                color: dept === d ? 'var(--cs-purple-dark)' : 'var(--cs-ink-soft)',
-                cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.12s',
-              }}
-            >
-              {d}
-            </button>
-          ))}
+        {/* Dept filter chips + 정렬 */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 24 }}>
+          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', flex: 1 }}>
+            {depts.map(d => (
+              <button
+                key={d}
+                onClick={() => setDept(d)}
+                style={{
+                  fontSize: 12.5, padding: '5px 13px', borderRadius: 'var(--cs-radius-pill)',
+                  border: '1px solid',
+                  borderColor: dept === d ? 'var(--cs-purple)' : 'var(--cs-border)',
+                  background: dept === d ? 'var(--cs-purple-bg)' : 'var(--cs-surface)',
+                  color: dept === d ? 'var(--cs-purple-dark)' : 'var(--cs-ink-soft)',
+                  cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.12s',
+                }}
+              >
+                {d}
+              </button>
+            ))}
+          </div>
+
+          {/* [추가] 정렬 드롭다운 */}
+          <select
+            value={sort}
+            onChange={e => setSort(e.target.value as SortKey)}
+            aria-label="정렬 기준"
+            style={{
+              flexShrink: 0,
+              fontSize: 12.5,
+              padding: '5px 8px',
+              borderRadius: 'var(--cs-radius-md)',
+              border: '1px solid var(--cs-border)',
+              background: 'var(--cs-surface)',
+              color: 'var(--cs-ink-soft)',
+              fontFamily: 'inherit',
+              cursor: 'pointer',
+            }}
+          >
+            {SORT_OPTIONS.map(opt => (
+              <option key={opt.key} value={opt.key}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Results */}
