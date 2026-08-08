@@ -210,6 +210,13 @@ export default function EditPostPage() {
     setErrorMessage,
   ] = useState("");
 
+  const [
+    purchaseCount,
+    setPurchaseCount,
+  ] = useState(0);
+
+  const hasPurchases = purchaseCount > 0;
+
   useEffect(() => {
     const loadEditPage = async () => {
       try {
@@ -232,6 +239,7 @@ export default function EditPostPage() {
           postResult,
           courseResult,
           attachmentResult,
+          purchaseCountResult,
         ] = await Promise.all([
           supabase
             .from("posts")
@@ -278,6 +286,14 @@ export default function EditPostPage() {
             .order("display_order", {
               ascending: true,
             }),
+
+          supabase
+            .from("post_purchases")
+            .select("id", {
+              count: "exact",
+              head: true,
+            })
+            .eq("post_id", postId),
         ]);
 
         if (postResult.error) {
@@ -290,6 +306,10 @@ export default function EditPostPage() {
 
         if (attachmentResult.error) {
           throw attachmentResult.error;
+        }
+
+        if (purchaseCountResult.error) {
+          throw purchaseCountResult.error;
         }
 
         const post =
@@ -361,6 +381,9 @@ export default function EditPostPage() {
           (attachmentResult.data ??
             []) as ExistingAttachment[],
         );
+        setPurchaseCount(
+          purchaseCountResult.count ?? 0,
+        );
       } catch (error) {
         console.error(
           "게시글 수정 정보 조회 실패:",
@@ -407,6 +430,14 @@ export default function EditPostPage() {
   const handleFileSelection = (
     event: React.ChangeEvent<HTMLInputElement>,
   ) => {
+    if (hasPurchases) {
+      event.target.value = "";
+      setFileErrorMessage(
+        "구매자가 있는 게시글은 첨부파일을 변경할 수 없어요.",
+      );
+      return;
+    }
+
     const selectedFiles = Array.from(
       event.target.files ?? [],
     );
@@ -499,6 +530,13 @@ export default function EditPostPage() {
   const removeExistingAttachment = (
     attachment: ExistingAttachment,
   ) => {
+    if (hasPurchases) {
+      setFileErrorMessage(
+        "구매자가 있는 게시글은 첨부파일을 삭제할 수 없어요.",
+      );
+      return;
+    }
+
     setExistingAttachments(
       (previous) =>
         previous.filter(
@@ -520,6 +558,10 @@ export default function EditPostPage() {
   const removeFile = (
     targetIndex: number,
   ) => {
+    if (hasPurchases) {
+      return;
+    }
+
     setFiles((previous) =>
       previous.filter(
         (_, index) =>
@@ -602,6 +644,39 @@ export default function EditPostPage() {
 
     try {
       setIsSaving(true);
+
+      /* 저장 직전 구매 여부를 다시 확인해 화면을 켜둔 사이의 구매도 반영합니다. */
+      const {
+        count: latestPurchaseCount,
+        error: purchaseCheckError,
+      } = await supabase
+        .from("post_purchases")
+        .select("id", {
+          count: "exact",
+          head: true,
+        })
+        .eq("post_id", postId);
+
+      if (purchaseCheckError) {
+        throw purchaseCheckError;
+      }
+
+      const isLockedByPurchase =
+        (latestPurchaseCount ?? 0) > 0;
+
+      setPurchaseCount(
+        latestPurchaseCount ?? 0,
+      );
+
+      if (
+        isLockedByPurchase &&
+        (files.length > 0 ||
+          removedAttachments.length > 0)
+      ) {
+        throw new Error(
+          "구매자가 생겨 첨부파일 변경이 잠겼어요. 새로고침 후 다시 수정해주세요.",
+        );
+      }
 
       const uploadedPaths: string[] = [];
       const insertedAttachmentIds: string[] = [];
@@ -702,21 +777,32 @@ export default function EditPostPage() {
           );
         }
 
+        const postUpdates =
+          isLockedByPurchase
+            ? {
+                /* 구매 후에는 제목/본문의 정정·보충만 허용 */
+                title: title.trim(),
+                content: body,
+                updated_at:
+                  new Date().toISOString(),
+              }
+            : {
+                course_offering_id:
+                  selectedSubjectId,
+                post_type:
+                  selectedTag,
+                title: title.trim(),
+                content: body,
+                price: 1,
+                updated_at:
+                  new Date().toISOString(),
+              };
+
         const {
           error: postUpdateError,
         } = await supabase
           .from("posts")
-          .update({
-            course_offering_id:
-              selectedSubjectId,
-            post_type:
-              selectedTag,
-            title: title.trim(),
-            content: body,
-            price: 1,
-            updated_at:
-              new Date().toISOString(),
-          })
+          .update(postUpdates)
           .eq("id", postId)
           .eq(
             "author_id",
@@ -979,15 +1065,22 @@ export default function EditPostPage() {
               ) => {
                 event.stopPropagation();
 
+                if (hasPurchases) {
+                  return;
+                }
+
                 setShowSubjectDropdown(
                   (previous) =>
                     !previous,
                 );
               }}
+              disabled={hasPurchases}
               style={{
                 background: "none",
                 border: "none",
-                cursor: "pointer",
+                cursor: hasPurchases
+                  ? "not-allowed"
+                  : "pointer",
                 fontFamily: "inherit",
                 fontSize: 13,
                 fontWeight: 500,
@@ -1002,6 +1095,9 @@ export default function EditPostPage() {
                 gap: 5,
                 transition:
                   "background 0.1s",
+                opacity: hasPurchases
+                  ? 0.65
+                  : 1,
               }}
               onMouseEnter={(
                 event,
@@ -1044,7 +1140,7 @@ export default function EditPostPage() {
               </span>
             </button>
 
-            {showSubjectDropdown && (
+            {showSubjectDropdown && !hasPurchases && (
               <div
                 onClick={(
                   event,
@@ -1304,6 +1400,25 @@ export default function EditPostPage() {
             </div>
           )}
 
+          {hasPurchases && (
+            <div
+              style={{
+                marginBottom: 20,
+                padding: "11px 13px",
+                border: "1px solid var(--cs-purple-border)",
+                borderRadius: "var(--cs-radius-md)",
+                background: "var(--cs-purple-bg)",
+                color: "var(--cs-purple-dark)",
+                fontSize: 12,
+                lineHeight: 1.65,
+              }}
+            >
+              이미 {purchaseCount}명이 구매한 글이에요.
+              과목·자료 유형·첨부파일은 변경할 수 없고,
+              제목과 본문만 정정하거나 보충할 수 있어요.
+            </div>
+          )}
+
           {/* 자료 유형 */}
           <div
             style={{
@@ -1375,6 +1490,10 @@ export default function EditPostPage() {
                       }
                       type="button"
                       onClick={() => {
+                        if (hasPurchases) {
+                          return;
+                        }
+
                         setSelectedTag(
                           option.key,
                         );
@@ -1383,6 +1502,7 @@ export default function EditPostPage() {
                           false,
                         );
                       }}
+                      disabled={hasPurchases}
                       style={{
                         ...style,
                         borderRadius:
@@ -1396,8 +1516,12 @@ export default function EditPostPage() {
                             : 400,
                         fontFamily:
                           "inherit",
-                        cursor:
-                          "pointer",
+                        cursor: hasPurchases
+                          ? "not-allowed"
+                          : "pointer",
+                        opacity: hasPurchases
+                          ? 0.65
+                          : 1,
                         transition:
                           "all 0.12s",
                       }}
@@ -1529,10 +1653,9 @@ export default function EditPostPage() {
                     lineHeight: 1.6,
                   }}
                 >
-                  PDF, 이미지, Word,
-                  PowerPoint 파일을 파일당
-                  최대 20MB까지 등록할 수
-                  있어요.
+                  {hasPurchases
+                    ? "구매가 발생한 게시글은 기존 첨부파일을 유지해야 해요."
+                    : "PDF, 이미지, Word, PowerPoint 파일을 파일당 최대 20MB까지 등록할 수 있어요."}
                 </p>
               </div>
 
@@ -1564,6 +1687,7 @@ export default function EditPostPage() {
                 handleFileSelection
               }
               disabled={
+                hasPurchases ||
                 isSaving ||
                 existingAttachments.length +
                   files.length >=
@@ -1576,10 +1700,15 @@ export default function EditPostPage() {
 
             <button
               type="button"
-              onClick={() =>
-                fileInputRef.current?.click()
-              }
+              onClick={() => {
+                if (hasPurchases) {
+                  return;
+                }
+
+                fileInputRef.current?.click();
+              }}
               disabled={
+                hasPurchases ||
                 isSaving ||
                 existingAttachments.length +
                   files.length >=
@@ -1647,7 +1776,9 @@ export default function EditPostPage() {
                   fontSize: 11.5,
                 }}
               >
-                파일 선택하기
+                {hasPurchases
+                  ? "첨부파일 변경 불가"
+                  : "파일 선택하기"}
               </strong>
 
               <small
@@ -1657,7 +1788,9 @@ export default function EditPostPage() {
                   fontSize: 10,
                 }}
               >
-                최대 5개 · 파일당 20MB
+                {hasPurchases
+                  ? "구매자가 있어 원본 파일이 잠겼어요"
+                  : "최대 5개 · 파일당 20MB"}
               </small>
             </button>
 
@@ -1798,6 +1931,7 @@ export default function EditPostPage() {
                         </span>
                       </div>
 
+                      {!hasPurchases && (
                       <button
                         type="button"
                         onClick={() =>
@@ -1836,6 +1970,7 @@ export default function EditPostPage() {
                       >
                         ×
                       </button>
+                      )}
                     </li>
                   ),
                 )}
