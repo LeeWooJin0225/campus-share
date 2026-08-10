@@ -8,6 +8,15 @@ import { supabase } from "@/lib/supabase";
 
 type FilterKey = "all" | TagType;
 
+/* [추가] 과목 내 정렬 종류 */
+type DocSortKey = "recent" | "oldest" | "comments";
+
+const DOC_SORT_OPTIONS: { key: DocSortKey; label: string }[] = [
+  { key: "recent", label: "최신순" },
+  { key: "oldest", label: "오래된 순" },
+  { key: "comments", label: "댓글 많은순" },
+];
+
 type SubjectInfo = {
   id: string;
   name: string;
@@ -19,7 +28,12 @@ type DocRow = {
   tag: TagType;
   title: string;
   author: string;
+  /* 화면에 보여줄 값 ("2일 전") */
   time: string;
+  /* [추가] 정렬에 쓸 원본 시각 (숫자) */
+  createdAt: number;
+  /* [추가] 내용 검색용 — HTML 태그를 제거한 순수 텍스트 */
+  plainText: string;
   comments: number;
 };
 
@@ -54,6 +68,8 @@ type OfferingRow = {
 type PostRow = {
   id: string;
   title: string;
+  /* [추가] 본문 (내용 검색용) */
+  content: string | null;
   post_type: TagType;
   created_at: string;
   comment_count: number | null;
@@ -78,6 +94,28 @@ function pickOne<T>(value: T | T[] | null): T | null {
   }
 
   return value;
+}
+
+/* [추가] HTML 태그를 걷어내고 순수 텍스트만 남깁니다.
+   RichTextEditor로 저장한 본문은 <p>안녕</p> 같은 형태라,
+   그대로 검색하면 "p"나 "strong" 같은 태그 이름이 걸려버립니다 */
+function stripHtml(html: string | null): string {
+  if (!html) return "";
+
+  return html
+    /* <br>, </p> 같은 줄바꿈 태그는 공백으로 (단어끼리 붙는 것 방지) */
+    .replace(/<(br|\/p|\/div|\/li|\/h[1-6])[^>]*>/gi, " ")
+    /* 나머지 태그는 제거 */
+    .replace(/<[^>]*>/g, "")
+    /* &nbsp; 같은 HTML 특수문자 처리 */
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    /* 연속 공백을 하나로 */
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function formatRelativeDate(dateString: string) {
@@ -115,6 +153,13 @@ export default function CoursePage() {
   const [activeTab, setActiveTab] =
     useState<FilterKey>("all");
 
+  /* [추가] 과목 내 검색어 — 입력 중인 값과 실제 적용된 값을 분리합니다.
+     헤더 검색과 달리 페이지 이동이 없으므로 URL은 쓰지 않습니다 */
+  const [docKeyword, setDocKeyword] = useState("");
+
+  /* [추가] 과목 내 정렬 */
+  const [docSort, setDocSort] = useState<DocSortKey>("recent");
+
   const [subject, setSubject] =
     useState<SubjectInfo | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -127,7 +172,7 @@ export default function CoursePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
-  const [sectionChoice, setSectionChoice] = useState <
+  const [sectionChoice, setSectionChoice] = useState<
     Record<number, string>
   >({});
 
@@ -243,6 +288,7 @@ export default function CoursePage() {
             .select(`
               id,
               title,
+              content,
               post_type,
               created_at,
               comment_count,
@@ -254,6 +300,8 @@ export default function CoursePage() {
             `)
             .in("course_offering_id", offeringIds)
             .eq("is_published", true)
+            /* [추가] 삭제된 글 제외 */
+            .eq("is_deleted", false)
             .order("created_at", { ascending: false });
 
         if (postError) {
@@ -276,6 +324,9 @@ export default function CoursePage() {
               ? "탈퇴한 사용자"
               : profile?.nickname ?? "익명",
             time: formatRelativeDate(row.created_at),
+            /* [추가] 화면용(time)과 계산용(createdAt)을 따로 담습니다 */
+            createdAt: new Date(row.created_at).getTime(),
+            plainText: stripHtml(row.content),
             comments: row.comment_count ?? 0,
           };
 
@@ -465,23 +516,64 @@ export default function CoursePage() {
     setShowAddPicker((prev) => !prev);
   };
 
+  /* [변경] 탭 필터 + 검색 + 정렬을 한 곳에서 처리합니다 */
   const filteredEntries = useMemo(() => {
+    const dq = docKeyword.trim().toLowerCase();
+
     return semesterEntries
-      .map((entry) => ({
-        ...entry,
-        chosen: {
-          ...entry.chosen,
-          docs: entry.chosen.docs.filter(
-            (d) =>
-              activeTab === "all" || d.tag === activeTab,
-          ),
-        },
-      }))
+      .map((entry) => {
+        /* 1) 탭 + 검색어로 걸러내기 */
+        const matched = entry.chosen.docs.filter((d) => {
+          const matchTab =
+            activeTab === "all" || d.tag === activeTab;
+
+          const matchQuery =
+            !dq ||
+            d.title.toLowerCase().includes(dq) ||
+            d.plainText.toLowerCase().includes(dq);
+
+          return matchTab && matchQuery;
+        });
+
+        /* 2) 정렬하기 — [...matched] 는 이미 filter가 만든 새 배열이라
+           안전하지만, .sort()가 원본을 뒤집는다는 점은 기억해두세요 */
+        const sortedDocs = [...matched];
+
+        if (docSort === "recent") {
+          sortedDocs.sort((a, b) => b.createdAt - a.createdAt);
+        } else if (docSort === "oldest") {
+          sortedDocs.sort((a, b) => a.createdAt - b.createdAt);
+        } else {
+          /* 댓글 수 내림차순, 같으면 최신순으로 한 번 더 정리 */
+          sortedDocs.sort(
+            (a, b) =>
+              b.comments - a.comments ||
+              b.createdAt - a.createdAt,
+          );
+        }
+
+        return {
+          ...entry,
+          chosen: {
+            ...entry.chosen,
+            docs: sortedDocs,
+          },
+        };
+      })
       .filter((entry) => entry.chosen.docs.length > 0);
-  }, [activeTab, semesterEntries]);
+  }, [activeTab, docKeyword, docSort, semesterEntries]);
+
+  /* [변경] 검색어가 있을 때는 결과가 없으면 없다고 보여줘야 하므로,
+     예전처럼 semesterEntries로 되돌리지 않습니다 */
+  const hasFilter =
+    activeTab !== "all" || docKeyword.trim() !== "";
 
   const displayEntries =
-    filteredEntries.length > 0 ? filteredEntries : semesterEntries;
+    filteredEntries.length > 0
+      ? filteredEntries
+      : hasFilter
+        ? []
+        : semesterEntries;
 
   if (isLoading) {
     return (
@@ -612,119 +704,191 @@ export default function CoursePage() {
           })}
         </div>
 
+        {/* [추가] 과목 내 검색창 */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          marginTop: 14,
+        }}>
+          <div style={{
+            flex: 1, display: 'flex', alignItems: 'center',
+            border: '1px solid var(--cs-border)',
+            borderRadius: 'var(--cs-radius-md)',
+            padding: '6px 10px',
+            background: 'var(--cs-surface)',
+          }}>
+            <svg
+              width="13" height="13" viewBox="0 0 24 24" fill="none"
+              stroke="var(--cs-ink-faint)" strokeWidth="2.2" strokeLinecap="round"
+              style={{ flexShrink: 0, marginRight: 7 }}
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <line x1="16.5" y1="16.5" x2="21" y2="21" />
+            </svg>
+
+            <input
+              type="search"
+              value={docKeyword}
+              onChange={e => setDocKeyword(e.target.value)}
+              placeholder="이 과목의 노트 제목·내용 검색"
+              aria-label="과목 내 검색"
+              style={{
+                flex: 1, minWidth: 0,
+                border: 'none', outline: 'none', background: 'none',
+                fontSize: 12.5, color: 'var(--cs-ink-body)',
+                fontFamily: 'inherit',
+              }}
+            />
+
+            {docKeyword && (
+              <button
+                type="button"
+                onClick={() => setDocKeyword('')}
+                aria-label="검색어 지우기"
+                style={{
+                  flexShrink: 0, border: 'none', background: 'none',
+                  color: 'var(--cs-ink-faint)', cursor: 'pointer',
+                  fontSize: 14, padding: '0 0 0 6px', lineHeight: 1,
+                  fontFamily: 'inherit',
+                }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Semester groups */}
         {groups.length > 0 ? (
-          <div style={{ borderLeft: '1px solid var(--cs-border-str)', paddingLeft: 20, marginLeft: 5, marginTop: 16 }}>
-            {displayEntries.map(entry => {
-              const g = entry.chosen;
-              const canWrite = g.offeringIds.some(id => addedIds.has(id));
+          displayEntries.length > 0 ? (
+            <div style={{ borderLeft: '1px solid var(--cs-border-str)', paddingLeft: 20, marginLeft: 5, marginTop: 16 }}>
+              {displayEntries.map(entry => {
+                const g = entry.chosen;
+                const canWrite = g.offeringIds.some(id => addedIds.has(id));
 
-              return (
-                <div key={entry.sortKey}>
-                  <div
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      margin: '24px 0 4px', position: 'relative',
-                    }}
-                  >
+                return (
+                  <div key={entry.sortKey}>
                     <div
                       style={{
-                        position: 'absolute', left: -25, width: 9, height: 9, borderRadius: 'var(--cs-radius-full)',
-                        background: g.isCurrent ? 'var(--cs-purple)' : 'var(--cs-surface)',
-                        border: g.isCurrent ? '1px solid var(--cs-purple)' : '1px solid var(--cs-border-str)',
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        margin: '24px 0 4px', position: 'relative',
                       }}
-                    />
-                    <h4 style={{ fontSize: 13, fontWeight: 600, margin: 0, color: 'var(--cs-ink)' }}>
-                      {g.semester}
-                    </h4>
-
-                    {entry.hasMultiple ? (
-                      <select
-                        value={g.groupKey}
-                        onChange={e => setSectionChoice(prev => ({ ...prev, [entry.sortKey]: e.target.value }))}
+                    >
+                      <div
                         style={{
-                          fontSize: 12, color: 'var(--cs-ink-soft)',
-                          border: '1px solid var(--cs-border)', borderRadius: 'var(--cs-radius-sm)',
-                          padding: '2px 6px', background: 'var(--cs-surface)',
-                          fontFamily: 'inherit', cursor: 'pointer',
+                          position: 'absolute', left: -25, width: 9, height: 9, borderRadius: 'var(--cs-radius-full)',
+                          background: g.isCurrent ? 'var(--cs-purple)' : 'var(--cs-surface)',
+                          border: g.isCurrent ? '1px solid var(--cs-purple)' : '1px solid var(--cs-border-str)',
                         }}
-                      >
-                        {entry.options.map(opt => (
-                          <option key={opt.groupKey} value={opt.groupKey}>
-                            {opt.professor} 교수님
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span style={{ fontSize: 12, color: 'var(--cs-ink-soft)' }}>· {g.professor} 교수님</span>
-                    )}
+                      />
+                      <h4 style={{ fontSize: 13, fontWeight: 600, margin: 0, color: 'var(--cs-ink)' }}>
+                        {g.semester}
+                      </h4>
 
-                    {g.isCurrent && (
-                      <span style={{
-                        fontSize: 11, color: 'var(--cs-purple-dark)', background: 'var(--cs-purple-bg)',
-                        padding: '2px 7px', borderRadius: 'var(--cs-radius-xs)',
-                      }}>
-                        이번 학기
-                      </span>
-                    )}
-                    <span style={{ fontSize: 11.5, color: 'var(--cs-ink-faint)' }}>{g.count}개</span>
-
-                    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      {canWrite && (
-                        <button
-                          onClick={() => router.push(`/notes/new?course=${g.offeringIds[0]}`)}
+                      {entry.hasMultiple ? (
+                        <select
+                          value={g.groupKey}
+                          onChange={e => setSectionChoice(prev => ({ ...prev, [entry.sortKey]: e.target.value }))}
                           style={{
-                            fontSize: 11.5, color: 'var(--cs-purple-dark)', background: 'var(--cs-surface)',
-                            border: '1px solid var(--cs-border)', padding: '3px 8px', borderRadius: 'var(--cs-radius-sm)',
-                            cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.1s',
+                            fontSize: 12, color: 'var(--cs-ink-soft)',
+                            border: '1px solid var(--cs-border)', borderRadius: 'var(--cs-radius-sm)',
+                            padding: '2px 6px', background: 'var(--cs-surface)',
+                            fontFamily: 'inherit', cursor: 'pointer',
                           }}
-                          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--cs-purple)'; e.currentTarget.style.background = 'var(--cs-purple-bg)' }}
-                          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cs-border)'; e.currentTarget.style.background = 'var(--cs-surface)' }}
                         >
-                          ＋ 노트
-                        </button>
+                          {entry.options.map(opt => (
+                            <option key={opt.groupKey} value={opt.groupKey}>
+                              {opt.professor} 교수님
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span style={{ fontSize: 12, color: 'var(--cs-ink-soft)' }}>· {g.professor} 교수님</span>
                       )}
 
-                      <button style={{
-                        fontSize: 11.5, color: 'var(--cs-ink-soft)', background: 'var(--cs-surface)',
-                        border: '1px solid var(--cs-border)', padding: '3px 8px', borderRadius: 'var(--cs-radius-sm)',
-                        cursor: 'pointer', fontFamily: 'inherit',
-                      }}>
-                        최신순 ▾
-                      </button>
+                      {g.isCurrent && (
+                        <span style={{
+                          fontSize: 11, color: 'var(--cs-purple-dark)', background: 'var(--cs-purple-bg)',
+                          padding: '2px 7px', borderRadius: 'var(--cs-radius-xs)',
+                        }}>
+                          이번 학기
+                        </span>
+                      )}
+                      <span style={{ fontSize: 11.5, color: 'var(--cs-ink-faint)' }}>{g.docs.length}개</span>
+
+                      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {canWrite && (
+                          <button
+                            onClick={() => router.push(`/notes/new?course=${g.offeringIds[0]}`)}
+                            style={{
+                              fontSize: 11.5, color: 'var(--cs-purple-dark)', background: 'var(--cs-surface)',
+                              border: '1px solid var(--cs-border)', padding: '3px 8px', borderRadius: 'var(--cs-radius-sm)',
+                              cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.1s',
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--cs-purple)'; e.currentTarget.style.background = 'var(--cs-purple-bg)' }}
+                            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cs-border)'; e.currentTarget.style.background = 'var(--cs-surface)' }}
+                          >
+                            ＋ 노트
+                          </button>
+                        )}
+
+                        {/* [변경] 껍데기 버튼 → 실제 동작하는 정렬 select */}
+                        <select
+                          value={docSort}
+                          onChange={e => setDocSort(e.target.value as DocSortKey)}
+                          aria-label="노트 정렬 기준"
+                          style={{
+                            fontSize: 11.5, color: 'var(--cs-ink-soft)', background: 'var(--cs-surface)',
+                            border: '1px solid var(--cs-border)', padding: '3px 6px', borderRadius: 'var(--cs-radius-sm)',
+                            cursor: 'pointer', fontFamily: 'inherit',
+                          }}
+                        >
+                          {DOC_SORT_OPTIONS.map(opt => (
+                            <option key={opt.key} value={opt.key}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div style={{ borderTop: '1px solid var(--cs-border)' }}>
+                      {g.docs.map((doc) => (
+                        <div
+                          key={doc.docId}
+                          onClick={() => router.push(`/posts/${doc.docId}`)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 11,
+                            padding: '11px 4px',
+                            borderBottom: '1px solid var(--cs-border)',
+                            cursor: 'pointer', transition: 'background 0.1s',
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--cs-hover-row)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          <TagChip tag={doc.tag} />
+                          <span style={{ fontSize: 13.5, color: 'var(--cs-ink)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {doc.title}
+                          </span>
+                          <span style={{ fontSize: 12, color: 'var(--cs-ink-faint)', flexShrink: 0 }}>
+                            {doc.author}
+                            <span style={{ marginLeft: 12 }}>{doc.time}</span>
+                            <span style={{ marginLeft: 12 }}>댓글 {doc.comments}</span>
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   </div>
-
-                  <div style={{ borderTop: '1px solid var(--cs-border)' }}>
-                    {g.docs.map((doc) => (
-                      <div
-                        key={doc.docId}
-                        onClick={() => router.push(`/posts/${doc.docId}`)}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 11,
-                          padding: '11px 4px',
-                          borderBottom: '1px solid var(--cs-border)',
-                          cursor: 'pointer', transition: 'background 0.1s',
-                        }}
-                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--cs-hover-row)')}
-                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                      >
-                        <TagChip tag={doc.tag} />
-                        <span style={{ fontSize: 13.5, color: 'var(--cs-ink)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {doc.title}
-                        </span>
-                        <span style={{ fontSize: 12, color: 'var(--cs-ink-faint)', flexShrink: 0 }}>
-                          {doc.author}
-                          <span style={{ marginLeft: 12 }}>{doc.time}</span>
-                          <span style={{ marginLeft: 12 }}>댓글 {doc.comments}</span>
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--cs-ink-faint)', fontSize: 13.5 }}>
+              {docKeyword.trim()
+                ? `"${docKeyword.trim()}"과 일치하는 노트가 없어요`
+                : '이 분류에 해당하는 노트가 없어요'}
+            </div>
+          )
         ) : (
           <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--cs-ink-faint)', fontSize: 13.5 }}>
             아직 올라온 노트가 없어요.
