@@ -161,6 +161,9 @@ export default function EditPostPage() {
   const [body, setBody] =
     useState("");
 
+  const [originalBody, setOriginalBody] =
+    useState("");
+
   const [
     existingAttachments,
     setExistingAttachments,
@@ -377,6 +380,7 @@ export default function EditPostPage() {
         setSelectedTag(post.post_type);
         setTitle(post.title);
         setBody(post.content ?? "");
+        setOriginalBody(post.content ?? "");
         setExistingAttachments(
           (attachmentResult.data ??
             []) as ExistingAttachment[],
@@ -777,12 +781,28 @@ export default function EditPostPage() {
           );
         }
 
+        const summarySourceChanged =
+          body !== originalBody ||
+          files.length > 0 ||
+          removedAttachments.length > 0;
+
+        const aiSummaryResetFields =
+          summarySourceChanged
+            ? {
+                ai_summary: null,
+                ai_summary_generated_at: null,
+              }
+            : {};
+
         const postUpdates =
           isLockedByPurchase
             ? {
                 /* 구매 후에는 제목/본문의 정정·보충만 허용 */
                 title: title.trim(),
                 content: body,
+
+                ...aiSummaryResetFields,
+
                 updated_at:
                   new Date().toISOString(),
               }
@@ -794,6 +814,9 @@ export default function EditPostPage() {
                 title: title.trim(),
                 content: body,
                 price: 1,
+
+                ...aiSummaryResetFields,
+
                 updated_at:
                   new Date().toISOString(),
               };
