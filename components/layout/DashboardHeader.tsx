@@ -11,11 +11,15 @@ import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import styles from "./DashboardHeader.module.css";
 
+type ProfileRow = {
+  nickname: string | null;
+  avatar_url: string | null;
+};
+
 export default function DashboardHeader() {
   const router = useRouter();
   const pathname = usePathname();
 
-  /* 검색창에 입력 중인 글자를 담아두는 상태 */
   const [keyword, setKeyword] = useState("");
 
   const [isUserMenuOpen, setIsUserMenuOpen] =
@@ -24,12 +28,14 @@ export default function DashboardHeader() {
   const [isLoggingOut, setIsLoggingOut] =
     useState(false);
 
-  const userMenuRef =
-    useRef<HTMLDivElement>(null);
+  const [nickname, setNickname] = useState("내 계정");
+  const [email, setEmail] = useState("");
+  const [initial, setInitial] = useState("나");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
-  /* 페이지가 바뀔 때 주소창의 q 값을 검색창에 다시 채워줍니다.
-     - /search?q=이산수학 링크를 직접 열어도 검색창에 글자가 보입니다
-     - 뒤로가기를 눌렀을 때 검색창과 목록이 어긋나지 않습니다 */
+  const userMenuRef =
+    useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
     const params = new URLSearchParams(
       window.location.search,
@@ -38,17 +44,80 @@ export default function DashboardHeader() {
     setKeyword(params.get("q") ?? "");
   }, [pathname]);
 
-  /* 실제로 검색을 실행하는 함수 (Enter와 버튼이 같이 사용) */
+  useEffect(() => {
+    const loadUserProfile = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        const user = session?.user;
+
+        if (!user) {
+          setNickname("내 계정");
+          setEmail("");
+          setInitial("나");
+          setAvatarUrl(null);
+          return;
+        }
+
+        setEmail(user.email ?? "");
+
+        const { data: profileData, error } = await supabase
+          .from("profiles")
+          .select("nickname, avatar_url")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (error) {
+          console.error("프로필 조회 실패:", error);
+          return;
+        }
+
+        const profile = profileData as ProfileRow | null;
+
+        const nextNickname =
+          profile?.nickname?.trim() || "내 계정";
+
+        setNickname(nextNickname);
+        setInitial(nextNickname.slice(0, 1) || "나");
+
+        const rawAvatarUrl = profile?.avatar_url ?? null;
+
+        if (!rawAvatarUrl) {
+          setAvatarUrl(null);
+          return;
+        }
+
+        if (
+          rawAvatarUrl.startsWith("http://") ||
+          rawAvatarUrl.startsWith("https://")
+        ) {
+          setAvatarUrl(rawAvatarUrl);
+          return;
+        }
+
+        const { data } = supabase.storage
+          .from("avatars")
+          .getPublicUrl(rawAvatarUrl);
+
+        setAvatarUrl(data.publicUrl);
+      } catch (error) {
+        console.error("사용자 정보 조회 실패:", error);
+      }
+    };
+
+    void loadUserProfile();
+  }, [pathname]);
+
   const runSearch = () => {
     const trimmed = keyword.trim();
 
     if (trimmed) {
-      /* encodeURIComponent: 한글이나 공백을 주소에 안전하게 담아줍니다 */
       router.push(
         `/search?q=${encodeURIComponent(trimmed)}`,
       );
     } else {
-      /* 빈 칸으로 검색하면 전체 목록으로 */
       router.push("/search");
     }
   };
@@ -118,6 +187,16 @@ export default function DashboardHeader() {
     }
   };
 
+  const avatarContent = avatarUrl ? (
+    <img
+      src={avatarUrl}
+      alt="프로필 이미지"
+      className={styles.avatarImage}
+    />
+  ) : (
+    initial
+  );
+
   return (
     <header className={styles.header}>
       <div className={styles.searchArea}>
@@ -125,12 +204,10 @@ export default function DashboardHeader() {
           type="search"
           placeholder="과목명, 교수님, 학과명을 검색해보세요"
           aria-label="과목 검색"
-          /* value + onChange 한 쌍이 있어야 입력한 글자가 state에 담깁니다 */
           value={keyword}
           onChange={(event) =>
             setKeyword(event.target.value)
           }
-          /* Enter를 누르면 검색 실행 */
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               runSearch();
@@ -138,7 +215,6 @@ export default function DashboardHeader() {
           }}
         />
 
-        {/* 돋보기 검색 버튼 — Enter와 똑같이 runSearch를 호출합니다 */}
         <button
           type="button"
           onClick={runSearch}
@@ -183,8 +259,9 @@ export default function DashboardHeader() {
             }
             aria-expanded={isUserMenuOpen}
             aria-haspopup="menu"
+            aria-label="사용자 메뉴"
           >
-            나
+            {avatarContent}
           </button>
 
           {isUserMenuOpen && (
@@ -202,12 +279,14 @@ export default function DashboardHeader() {
                     styles.userAvatar
                   }
                 >
-                  나
+                  {avatarContent}
                 </div>
 
                 <div>
-                  <strong>내 계정</strong>
-                  <span>CampusShare</span>
+                  <strong>{nickname}</strong>
+                  <span>
+                    {email || "이메일 정보 없음"}
+                  </span>
                 </div>
               </div>
 
