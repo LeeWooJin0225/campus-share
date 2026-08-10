@@ -8,13 +8,14 @@ import { supabase } from "@/lib/supabase";
 
 type FilterKey = "all" | TagType;
 
-/* [추가] 과목 내 정렬 종류 */
-type DocSortKey = "recent" | "oldest" | "comments";
+/* 과목 내 정렬 종류 */
+type DocSortKey = "recent" | "oldest" | "comments" | "likes";
 
 const DOC_SORT_OPTIONS: { key: DocSortKey; label: string }[] = [
   { key: "recent", label: "최신순" },
   { key: "oldest", label: "오래된 순" },
   { key: "comments", label: "댓글 많은순" },
+  { key: "likes", label: "좋아요순" },
 ];
 
 type SubjectInfo = {
@@ -30,11 +31,12 @@ type DocRow = {
   author: string;
   /* 화면에 보여줄 값 ("2일 전") */
   time: string;
-  /* [추가] 정렬에 쓸 원본 시각 (숫자) */
+  /* 정렬에 쓸 원본 시각 (숫자) */
   createdAt: number;
-  /* [추가] 내용 검색용 — HTML 태그를 제거한 순수 텍스트 */
+  /* 내용 검색용 — HTML 태그를 제거한 순수 텍스트 */
   plainText: string;
   comments: number;
+  likes: number;
 };
 
 type Group = {
@@ -68,11 +70,12 @@ type OfferingRow = {
 type PostRow = {
   id: string;
   title: string;
-  /* [추가] 본문 (내용 검색용) */
+  /* 본문 (내용 검색용) */
   content: string | null;
   post_type: TagType;
   created_at: string;
   comment_count: number | null;
+  like_count: number | null;
   course_offering_id: string;
   profiles:
     | { nickname: string | null; is_deleted: boolean | null }
@@ -96,7 +99,7 @@ function pickOne<T>(value: T | T[] | null): T | null {
   return value;
 }
 
-/* [추가] HTML 태그를 걷어내고 순수 텍스트만 남깁니다.
+/* HTML 태그를 걷어내고 순수 텍스트만 남깁니다.
    RichTextEditor로 저장한 본문은 <p>안녕</p> 같은 형태라,
    그대로 검색하면 "p"나 "strong" 같은 태그 이름이 걸려버립니다 */
 function stripHtml(html: string | null): string {
@@ -153,12 +156,16 @@ export default function CoursePage() {
   const [activeTab, setActiveTab] =
     useState<FilterKey>("all");
 
-  /* [추가] 과목 내 검색어 — 입력 중인 값과 실제 적용된 값을 분리합니다.
-     헤더 검색과 달리 페이지 이동이 없으므로 URL은 쓰지 않습니다 */
+  /* 과목 내 검색어 — 페이지 이동이 없으므로 URL은 쓰지 않습니다 */
   const [docKeyword, setDocKeyword] = useState("");
 
-  /* [추가] 과목 내 정렬 */
+  /* 과목 내 정렬 */
   const [docSort, setDocSort] = useState<DocSortKey>("recent");
+
+  /* [추가] 열람한 글만 보기 — 정렬이 아니라 필터입니다.
+     열람 기록은 포인트 시스템의 post_purchases를 그대로 씁니다 */
+  const [onlyViewed, setOnlyViewed] = useState(false);
+  const [viewedIds, setViewedIds] = useState<Set<string>>(new Set());
 
   const [subject, setSubject] =
     useState<SubjectInfo | null>(null);
@@ -205,6 +212,19 @@ export default function CoursePage() {
             ((enrollments ?? []) as {
               course_offering_id: string;
             }[]).map((r) => r.course_offering_id),
+          ),
+        );
+
+        /* [추가] 내가 열람(구매)한 글 목록 */
+        const { data: viewData } = await supabase
+          .from("post_purchases")
+          .select("post_id")
+          .eq("buyer_id", uid);
+
+        setViewedIds(
+          new Set(
+            ((viewData ?? []) as { post_id: string }[])
+              .map((r) => r.post_id),
           ),
         );
 
@@ -292,6 +312,7 @@ export default function CoursePage() {
               post_type,
               created_at,
               comment_count,
+              like_count,
               course_offering_id,
               profiles:author_id (
                 nickname,
@@ -300,7 +321,6 @@ export default function CoursePage() {
             `)
             .in("course_offering_id", offeringIds)
             .eq("is_published", true)
-            /* [추가] 삭제된 글 제외 */
             .eq("is_deleted", false)
             .order("created_at", { ascending: false });
 
@@ -324,10 +344,11 @@ export default function CoursePage() {
               ? "탈퇴한 사용자"
               : profile?.nickname ?? "익명",
             time: formatRelativeDate(row.created_at),
-            /* [추가] 화면용(time)과 계산용(createdAt)을 따로 담습니다 */
+            /* 화면용(time)과 계산용(createdAt)을 따로 담습니다 */
             createdAt: new Date(row.created_at).getTime(),
             plainText: stripHtml(row.content),
             comments: row.comment_count ?? 0,
+            likes: row.like_count ?? 0,
           };
 
           if (!docsByOffering[row.course_offering_id]) {
@@ -516,13 +537,13 @@ export default function CoursePage() {
     setShowAddPicker((prev) => !prev);
   };
 
-  /* [변경] 탭 필터 + 검색 + 정렬을 한 곳에서 처리합니다 */
+  /* 탭 필터 + 검색 + 열람 필터 + 정렬을 한 곳에서 처리합니다 */
   const filteredEntries = useMemo(() => {
     const dq = docKeyword.trim().toLowerCase();
 
     return semesterEntries
       .map((entry) => {
-        /* 1) 탭 + 검색어로 걸러내기 */
+        /* 1) 걸러내기 */
         const matched = entry.chosen.docs.filter((d) => {
           const matchTab =
             activeTab === "all" || d.tag === activeTab;
@@ -532,22 +553,31 @@ export default function CoursePage() {
             d.title.toLowerCase().includes(dq) ||
             d.plainText.toLowerCase().includes(dq);
 
-          return matchTab && matchQuery;
+          /* [추가] 열람한 글만 */
+          const matchViewed = !onlyViewed || viewedIds.has(d.docId);
+
+          return matchTab && matchQuery && matchViewed;
         });
 
-        /* 2) 정렬하기 — [...matched] 는 이미 filter가 만든 새 배열이라
-           안전하지만, .sort()가 원본을 뒤집는다는 점은 기억해두세요 */
+        /* 2) 정렬하기 */
         const sortedDocs = [...matched];
 
         if (docSort === "recent") {
           sortedDocs.sort((a, b) => b.createdAt - a.createdAt);
         } else if (docSort === "oldest") {
           sortedDocs.sort((a, b) => a.createdAt - b.createdAt);
-        } else {
+        } else if (docSort === "comments") {
           /* 댓글 수 내림차순, 같으면 최신순으로 한 번 더 정리 */
           sortedDocs.sort(
             (a, b) =>
               b.comments - a.comments ||
+              b.createdAt - a.createdAt,
+          );
+        } else {
+          /* 좋아요 수 내림차순, 같으면 최신순 */
+          sortedDocs.sort(
+            (a, b) =>
+              b.likes - a.likes ||
               b.createdAt - a.createdAt,
           );
         }
@@ -561,12 +591,11 @@ export default function CoursePage() {
         };
       })
       .filter((entry) => entry.chosen.docs.length > 0);
-  }, [activeTab, docKeyword, docSort, semesterEntries]);
+  }, [activeTab, docKeyword, docSort, onlyViewed, viewedIds, semesterEntries]);
 
-  /* [변경] 검색어가 있을 때는 결과가 없으면 없다고 보여줘야 하므로,
-     예전처럼 semesterEntries로 되돌리지 않습니다 */
+  /* 필터가 걸려 있으면 결과가 없을 때 전체로 되돌리지 않습니다 */
   const hasFilter =
-    activeTab !== "all" || docKeyword.trim() !== "";
+    activeTab !== "all" || docKeyword.trim() !== "" || onlyViewed;
 
   const displayEntries =
     filteredEntries.length > 0
@@ -704,7 +733,7 @@ export default function CoursePage() {
           })}
         </div>
 
-        {/* [추가] 과목 내 검색창 */}
+        {/* 과목 내 검색창 + 열람 필터 */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
           marginTop: 14,
@@ -756,6 +785,29 @@ export default function CoursePage() {
               </button>
             )}
           </div>
+
+          {/* [추가] 열람한 글만 — 정렬이 아니라 필터라서 체크박스로 분리했습니다 */}
+          <label style={{
+            flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6,
+            fontSize: 12,
+            color: onlyViewed ? 'var(--cs-purple-dark)' : 'var(--cs-ink-soft)',
+            cursor: 'pointer', userSelect: 'none',
+            border: '1px solid',
+            borderColor: onlyViewed ? 'var(--cs-purple)' : 'var(--cs-border)',
+            background: onlyViewed ? 'var(--cs-purple-bg)' : 'var(--cs-surface)',
+            borderRadius: 'var(--cs-radius-md)',
+            padding: '6px 10px',
+            transition: 'all 0.12s',
+            whiteSpace: 'nowrap',
+          }}>
+            <input
+              type="checkbox"
+              checked={onlyViewed}
+              onChange={e => setOnlyViewed(e.target.checked)}
+              style={{ cursor: 'pointer', margin: 0 }}
+            />
+            열람한 글만
+          </label>
         </div>
 
         {/* Semester groups */}
@@ -832,7 +884,6 @@ export default function CoursePage() {
                           </button>
                         )}
 
-                        {/* [변경] 껍데기 버튼 → 실제 동작하는 정렬 select */}
                         <select
                           value={docSort}
                           onChange={e => setDocSort(e.target.value as DocSortKey)}
@@ -874,6 +925,7 @@ export default function CoursePage() {
                             {doc.author}
                             <span style={{ marginLeft: 12 }}>{doc.time}</span>
                             <span style={{ marginLeft: 12 }}>댓글 {doc.comments}</span>
+                            <span style={{ marginLeft: 12 }}>♥ {doc.likes}</span>
                           </span>
                         </div>
                       ))}
@@ -886,7 +938,9 @@ export default function CoursePage() {
             <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--cs-ink-faint)', fontSize: 13.5 }}>
               {docKeyword.trim()
                 ? `"${docKeyword.trim()}"과 일치하는 노트가 없어요`
-                : '이 분류에 해당하는 노트가 없어요'}
+                : onlyViewed
+                  ? '아직 열람한 노트가 없어요'
+                  : '이 분류에 해당하는 노트가 없어요'}
             </div>
           )
         ) : (
