@@ -204,3 +204,15 @@
   background: var(--cs-purple-bg);
   color: var(--cs-purple-dark);
 }
+
+.userButton,
+.userAvatar {
+  overflow: hidden;
+}
+
+.avatarImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
