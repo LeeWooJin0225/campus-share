@@ -20,6 +20,7 @@ type DocInfo = {
   courseOfferingId: string;
   price: number;
   isPublished: boolean;
+  aiSummary: string | null;
 };
 
 type CourseInfo = {
@@ -77,6 +78,7 @@ type PostRow = {
   course_offering_id: string;
   price: number;
   is_published: boolean;
+  ai_summary: string | null;
   profiles:
   | { nickname: string | null; is_deleted: boolean | null }
   | { nickname: string | null; is_deleted: boolean | null }[]
@@ -225,6 +227,15 @@ export default function DocumentPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
+  const [aiSummary, setAiSummary] =
+    useState<string | null>(null);
+  const [isGeneratingSummary, setIsGeneratingSummary] =
+    useState(false);
+  const [aiSummaryError, setAiSummaryError] =
+    useState("");
+  const [isAiSummaryOpen, setIsAiSummaryOpen] =
+    useState(false);
+
   useEffect(() => {
     const loadDocument = async () => {
       try {
@@ -255,6 +266,7 @@ export default function DocumentPage() {
               course_offering_id,
               price,
               is_published,
+              ai_summary,
               profiles:author_id (
                 nickname,
                 is_deleted
@@ -307,7 +319,11 @@ export default function DocumentPage() {
           courseOfferingId: row.course_offering_id,
           price: 1,
           isPublished: row.is_published,
+          aiSummary: row.ai_summary ?? null,
         });
+
+        setAiSummary(row.ai_summary ?? null);
+        setIsAiSummaryOpen(false);
 
         setSubject({
           id: course?.id ?? row.course_offering_id,
@@ -696,6 +712,91 @@ export default function DocumentPage() {
       );
     } finally {
       setIsPurchasing(false);
+    }
+  };
+
+  const pdfAttachmentCount =
+    attachments.filter(
+      (attachment) =>
+        attachment.mimeType === "application/pdf" ||
+        attachment.originalName
+          .toLowerCase()
+          .endsWith(".pdf"),
+    ).length;
+
+  const hasMoreThanFivePdfs =
+    pdfAttachmentCount > 5;
+
+  const generateAiSummary = async () => {
+    if (
+      !doc ||
+      isGeneratingSummary
+    ) {
+      return;
+    }
+
+    try {
+      setIsGeneratingSummary(true);
+      setAiSummaryError("");
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        throw new Error("로그인이 필요합니다.");
+      }
+
+      const response = await fetch(
+        `/api/posts/${doc.id}/summary`,
+        {
+          method: "POST",
+          headers: {
+            Authorization:
+              `Bearer ${session.access_token}`,
+          },
+        },
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.error ??
+            "AI 요약을 생성하지 못했습니다.",
+        );
+      }
+
+      setAiSummary(result.summary ?? null);
+      setIsAiSummaryOpen(true);
+
+      setDoc((previous) =>
+        previous
+          ? {
+              ...previous,
+              aiSummary:
+                result.summary ?? null,
+            }
+          : previous,
+      );
+    } catch (error) {
+      console.error(
+        "AI 요약 요청 실패:",
+        error,
+      );
+
+      const message =
+        error instanceof Error
+          ? error.message
+          : "AI 요약을 생성하지 못했습니다.";
+
+      setAiSummaryError(
+        message.includes("요약할 내용이 부족")
+          ? message
+          : "AI 요약을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+      );
+    } finally {
+      setIsGeneratingSummary(false);
     }
   };
 
@@ -1575,6 +1676,232 @@ export default function DocumentPage() {
                     ? "포인트가 부족해요"
                     : "1P로 구매하기"}
               </button>
+            )}
+          </section>
+        )}
+
+        {/* AI Summary */}
+        {canAccessPaidContent && (
+          <section
+            style={{
+              marginTop: 28,
+              padding: 18,
+              border:
+                "1px solid var(--cs-purple-border)",
+              borderRadius: 10,
+              background:
+                "var(--cs-purple-bg)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    color:
+                      "var(--cs-purple-dark)",
+                    fontSize: 13,
+                    fontWeight: 700,
+                  }}
+                >
+                  ✨ AI 요약
+                </div>
+
+                {!isAiSummaryOpen && (
+                  <div
+                    style={{
+                      marginTop: 4,
+                      color:
+                        "var(--cs-ink-soft)",
+                      fontSize: 11.5,
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    게시글 본문과 첨부된 PDF를 바탕으로
+                    핵심 내용을 정리해드려요.
+                  </div>
+                )}
+              </div>
+
+              {aiSummary ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setIsAiSummaryOpen(
+                      (previous) => !previous,
+                    )
+                  }
+                  style={{
+                    flexShrink: 0,
+                    border:
+                      "1px solid var(--cs-purple-border)",
+                    borderRadius:
+                      "var(--cs-radius-md)",
+                    padding: "7px 12px",
+                    background:
+                      "var(--cs-surface)",
+                    color:
+                      "var(--cs-purple-dark)",
+                    fontFamily: "inherit",
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  {isAiSummaryOpen
+                    ? "접기"
+                    : "AI 요약 보기"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() =>
+                    void generateAiSummary()
+                  }
+                  disabled={isGeneratingSummary}
+                  style={{
+                    flexShrink: 0,
+                    border: 0,
+                    borderRadius:
+                      "var(--cs-radius-md)",
+                    padding: "7px 12px",
+                    background:
+                      "var(--cs-purple)",
+                    color: "white",
+                    fontFamily: "inherit",
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    cursor:
+                      isGeneratingSummary
+                        ? "not-allowed"
+                        : "pointer",
+                    opacity:
+                      isGeneratingSummary
+                        ? 0.55
+                        : 1,
+                  }}
+                >
+                  {isGeneratingSummary
+                    ? "요약 중..."
+                    : "AI 요약 생성"}
+                </button>
+              )}
+            </div>
+
+            {aiSummary && isAiSummaryOpen && (
+              <div
+                style={{
+                  marginTop: 16,
+                  paddingTop: 14,
+                  borderTop:
+                    "1px solid var(--cs-purple-border)",
+                  color:
+                    "var(--cs-ink-body)",
+                  fontSize: 13,
+                  lineHeight: 1.8,
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {aiSummary}
+              </div>
+            )}
+
+            {aiSummaryError && (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: 12,
+                  border:
+                    "1px solid var(--cs-border)",
+                  borderRadius:
+                    "var(--cs-radius-md)",
+                  background:
+                    "var(--cs-surface)",
+                }}
+              >
+                <div
+                  style={{
+                    color:
+                      "var(--cs-error)",
+                    fontSize: 11.5,
+                    lineHeight: 1.6,
+                  }}
+                >
+                  {aiSummaryError}
+                </div>
+
+                {!aiSummaryError.includes(
+                  "요약할 내용이 부족",
+                ) && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void generateAiSummary()
+                    }
+                    disabled={
+                      isGeneratingSummary
+                    }
+                    style={{
+                      marginTop: 9,
+                      border:
+                        "1px solid var(--cs-border-str)",
+                      borderRadius:
+                        "var(--cs-radius-md)",
+                      padding: "6px 10px",
+                      background:
+                        "var(--cs-surface)",
+                      color:
+                        "var(--cs-ink)",
+                      fontFamily:
+                        "inherit",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor:
+                        isGeneratingSummary
+                          ? "not-allowed"
+                          : "pointer",
+                    }}
+                  >
+                    다시 시도
+                  </button>
+                )}
+              </div>
+            )}
+
+            {hasMoreThanFivePdfs && (
+              <div
+                style={{
+                  marginTop: 10,
+                  color:
+                    "var(--cs-ink-faint)",
+                  fontSize: 10.5,
+                  lineHeight: 1.55,
+                }}
+              >
+                첨부된 PDF가 많아 앞의 5개 파일을
+                기준으로 요약합니다.
+              </div>
+            )}
+
+            {(isAiSummaryOpen || !aiSummary) && (
+              <div
+                style={{
+                  marginTop: 12,
+                  color:
+                    "var(--cs-ink-faint)",
+                  fontSize: 10,
+                  lineHeight: 1.55,
+                }}
+              >
+                AI가 생성한 요약으로, 원본 자료와
+                차이가 있을 수 있습니다.
+              </div>
             )}
           </section>
         )}
