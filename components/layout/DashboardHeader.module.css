@@ -182,3 +182,25 @@
     justify-content: flex-end;
   }
 }
+
+.searchButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  margin-left: 6px;
+  padding: 0;
+  border: none;
+  border-radius: var(--cs-radius-full);
+  background: none;
+  color: var(--cs-ink-faint);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.searchButton:hover {
+  background: var(--cs-purple-bg);
+  color: var(--cs-purple-dark);
+}
