@@ -54,17 +54,17 @@ type OfferingRow = {
   id: string;
   subject_id: string;
   subjects:
-    | { id: string; name: string; department: string | null }
-    | { id: string; name: string; department: string | null }[]
-    | null;
+  | { id: string; name: string; department: string | null }
+  | { id: string; name: string; department: string | null }[]
+  | null;
   professors:
-    | { id: string; name: string }
-    | { id: string; name: string }[]
-    | null;
+  | { id: string; name: string }
+  | { id: string; name: string }[]
+  | null;
   semesters:
-    | { year: number; term: number }
-    | { year: number; term: number }[]
-    | null;
+  | { year: number; term: number }
+  | { year: number; term: number }[]
+  | null;
 };
 
 type PostRow = {
@@ -78,9 +78,9 @@ type PostRow = {
   like_count: number | null;
   course_offering_id: string;
   profiles:
-    | { nickname: string | null; is_deleted: boolean | null }
-    | { nickname: string | null; is_deleted: boolean | null }[]
-    | null;
+  | { nickname: string | null; is_deleted: boolean | null }
+  | { nickname: string | null; is_deleted: boolean | null }[]
+  | null;
 };
 
 const FILTER_TABS: { key: FilterKey; label: string }[] = [
@@ -306,19 +306,25 @@ export default function CoursePage() {
           await supabase
             .from("posts")
             .select(`
+            id,
+            title,
+            content,
+            post_type,
+            created_at,
+            comment_count,
+            like_count,
+            course_offering_id,
+            profiles!posts_author_id_fkey (
+              nickname,
+              is_deleted
+            ),
+            course_offerings (
               id,
-              title,
-              content,
-              post_type,
-              created_at,
-              comment_count,
-              like_count,
-              course_offering_id,
-              profiles:author_id (
-                nickname,
-                is_deleted
+              subjects (
+                name
               )
-            `)
+            )
+          `)
             .in("course_offering_id", offeringIds)
             .eq("is_published", true)
             .eq("is_deleted", false)

@@ -911,7 +911,7 @@ export default function MyPage() {
               <div style={{ fontSize: 12, color: 'var(--cs-purple-dark)', lineHeight: 1.7, textAlign: 'right' }}>
                 노트 열람 시 1p 차감<br />
                 노트 업로드 시 30p 적립<br />
-                가입 보너스 30p
+                가입 보너스 50p
               </div>
             </div>
             {pointHistory.length === 0 ? (
