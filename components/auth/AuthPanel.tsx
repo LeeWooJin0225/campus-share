@@ -128,12 +128,61 @@ export default function AuthPanel({ mode }: AuthPanelProps) {
           borderRight: '1px solid var(--cs-border)',
         }}
       >
-        {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 34 }}>
-          <div style={{ width: 19, height: 19, borderRadius: 'var(--cs-radius-sm)', background: 'var(--cs-purple)', flexShrink: 0 }} />
-          <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--cs-ink)', letterSpacing: '-0.01em' }}>CampusShare</span>
-        </div>
+      {/* Logo */}
+<div
+  style={{
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 34,
+  }}
+>
+  <div
+    style={{
+      width: 20,
+      height: 20,
+      borderRadius: 5,
+      background: 'var(--cs-purple)',
+      flexShrink: 0,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+    }}
+  >
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M4.5 6.5C7.3 6.5 9.5 7.2 12 9 C14.5 7.2 16.7 6.5 19.5 6.5 V17.5 C16.7 17.5 14.5 18.1 12 20 C9.5 18.1 7.3 17.5 4.5 17.5 V6.5Z"
+        stroke="white"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M12 9V20"
+        stroke="white"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  </div>
 
+  <span
+    style={{
+      fontWeight: 600,
+      fontSize: 15,
+      color: 'var(--cs-ink)',
+      letterSpacing: '-0.01em',
+    }}
+  >
+    CampusShare
+  </span>
+</div>
         <h1 style={{ fontSize: 27, fontWeight: 600, lineHeight: 1.42, letterSpacing: '-0.02em', color: 'var(--cs-ink)', margin: 0 }}>
           수업이 끝나도<br />노트는 남습니다.
         </h1>

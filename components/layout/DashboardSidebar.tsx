@@ -536,12 +536,45 @@ function LogoMark() {
   return (
     <div
       style={{
-        width: 19,
-        height: 19,
-        borderRadius: "var(--cs-radius-sm)",
+        width: 20,
+        height: 20,
+        borderRadius: 5,
         background: "var(--cs-purple)",
         flexShrink: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
       }}
-    />
+    >
+      <svg
+        width="13"
+        height="13"
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true"
+      >
+        {/* 펼쳐진 책 */}
+        <path
+          d="M4.5 6.5C7.3 6.5 9.5 7.2 12 9
+             C14.5 7.2 16.7 6.5 19.5 6.5
+             V17.5
+             C16.7 17.5 14.5 18.1 12 20
+             C9.5 18.1 7.3 17.5 4.5 17.5
+             V6.5Z"
+          stroke="white"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        {/* 책 중앙 */}
+        <path
+          d="M12 9V20"
+          stroke="white"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+        />
+      </svg>
+    </div>
   );
 }
