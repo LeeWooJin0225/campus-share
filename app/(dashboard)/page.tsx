@@ -28,25 +28,25 @@ type RecentDoc = {
 
 type MyCourseRow = {
   course_offerings:
-    | CourseRelation
-    | CourseRelation[]
-    | null;
+  | CourseRelation
+  | CourseRelation[]
+  | null;
 };
 
 type CourseRelation = {
   id: string;
   subjects:
-    | { name: string }
-    | { name: string }[]
-    | null;
+  | { name: string }
+  | { name: string }[]
+  | null;
   professors:
-    | { name: string }
-    | { name: string }[]
-    | null;
+  | { name: string }
+  | { name: string }[]
+  | null;
   semesters:
-    | { year: number; term: number }
-    | { year: number; term: number }[]
-    | null;
+  | { year: number; term: number }
+  | { year: number; term: number }[]
+  | null;
 };
 
 type RecentPostRow = {
@@ -56,13 +56,13 @@ type RecentPostRow = {
   created_at: string;
   comment_count: number | null;
   profiles:
-    | { nickname: string | null; is_deleted: boolean | null }
-    | { nickname: string | null; is_deleted: boolean | null }[]
-    | null;
+  | { nickname: string | null; is_deleted: boolean | null }
+  | { nickname: string | null; is_deleted: boolean | null }[]
+  | null;
   course_offerings:
-    | CourseRelation
-    | CourseRelation[]
-    | null;
+  | CourseRelation
+  | CourseRelation[]
+  | null;
 };
 
 
@@ -227,7 +227,7 @@ export default function HomePage() {
               post_type,
               created_at,
               comment_count,
-              profiles (
+              profiles!posts_author_id_fkey (
                 nickname,
                 is_deleted
               ),
@@ -271,125 +271,136 @@ export default function HomePage() {
           }),
         );
       } catch (error) {
-        console.error("홈 화면 조회 실패:", error);
+        const err = error as {
+          message?: string;
+          code?: string;
+          details?: string;
+          hint?: string;
+        };
+
+        console.error("======= 홈 조회 에러 =======");
+        console.error("message:", err?.message);
+        console.error("code:", err?.code);
+        console.error("details:", err?.details);
+        console.error("hint:", err?.hint);
+        console.error("raw:", error);
+        console.error("==========================");
 
         setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "홈 화면을 불러오지 못했습니다.",
+          err?.message || "홈 화면을 불러오지 못했습니다.",
         );
       } finally {
-        setIsLoading(false);
-      }
-    };
+      setIsLoading(false);
+    }
+  };
 
-    void loadHome();
-  }, [router]);
+  void loadHome();
+}, [router]);
 
-  return (
-    <div style={{ padding: '24px 26px 34px', overflowY: 'auto', height: '100%', background: 'var(--cs-surface)' }}>
+return (
+  <div style={{ padding: '24px 26px 34px', overflowY: 'auto', height: '100%', background: 'var(--cs-surface)' }}>
 
-      {/* Subject cards */}
-      <SectionLabel>내 과목</SectionLabel>
+    {/* Subject cards */}
+    <SectionLabel>내 과목</SectionLabel>
 
-      {isLoading ? (
-        <div style={{ fontSize: 12.5, color: 'var(--cs-ink-faint)', marginBottom: 30 }}>
-          불러오는 중이에요
-        </div>
-      ) : errorMessage ? (
-        <div style={{ fontSize: 12.5, color: 'var(--cs-error)', marginBottom: 30 }}>
-          {errorMessage}
-        </div>
-      ) : subjects.length === 0 ? (
-        <div style={{ fontSize: 12.5, color: 'var(--cs-ink-faint)', marginBottom: 30 }}>
-          담은 과목이 없어요 · 전체 과목 검색에서 추가해보세요
+    {isLoading ? (
+      <div style={{ fontSize: 12.5, color: 'var(--cs-ink-faint)', marginBottom: 30 }}>
+        불러오는 중이에요
+      </div>
+    ) : errorMessage ? (
+      <div style={{ fontSize: 12.5, color: 'var(--cs-error)', marginBottom: 30 }}>
+        {errorMessage}
+      </div>
+    ) : subjects.length === 0 ? (
+      <div style={{ fontSize: 12.5, color: 'var(--cs-ink-faint)', marginBottom: 30 }}>
+        담은 과목이 없어요 · 전체 과목 검색에서 추가해보세요
+      </div>
+    ) : (
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: 12,
+          marginBottom: 30,
+        }}
+      >
+        {subjects.map(subject => (
+          <div
+            key={subject.id}
+            onClick={() => router.push(`/courses/${subject.id}`)}
+            style={{
+              padding: '14px 15px',
+              background: 'var(--cs-surface)',
+              border: subject.empty ? '1px dashed var(--cs-border-str)' : '1px solid var(--cs-border)',
+              borderRadius: 'var(--cs-radius-xl)',
+              cursor: 'pointer',
+              transition: 'border-color 0.1s',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--cs-border-str)')}
+            onMouseLeave={e => (e.currentTarget.style.borderColor = subject.empty ? 'var(--cs-border-str)' : 'var(--cs-border)')}
+          >
+            <h3 style={{ fontSize: 14, fontWeight: 600, margin: 0, letterSpacing: '-0.01em', color: 'var(--cs-ink)' }}>
+              {subject.name}
+            </h3>
+
+            <div style={{ fontSize: 12, color: 'var(--cs-ink-faint)', marginTop: 3 }}>
+              {subject.professor} 교수님 · {subject.semester}학기
+            </div>
+
+            <div style={{
+              fontSize: 11.5, marginTop: 14,
+              color: subject.empty ? 'var(--cs-purple)' : 'var(--cs-ink-faint)',
+            }}>
+              {subject.empty
+                ? '아직 노트가 없어요 · 첫 노트 쓰기'
+                : `노트 ${subject.docCount}개 · ${subject.latestTime}`
+              }
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+
+    {/* Recent notes */}
+    <SectionLabel>최근 올라온 노트</SectionLabel>
+
+    <div style={{ borderTop: '1px solid var(--cs-border)' }}>
+      {recent.length === 0 && !isLoading ? (
+        <div style={{ padding: '11px 4px', fontSize: 12.5, color: 'var(--cs-ink-faint)' }}>
+          아직 올라온 노트가 없어요
         </div>
       ) : (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: 12,
-            marginBottom: 30,
-          }}
-        >
-          {subjects.map(subject => (
-            <div
-              key={subject.id}
-              onClick={() => router.push(`/courses/${subject.id}`)}
-              style={{
-                padding: '14px 15px',
-                background: 'var(--cs-surface)',
-                border: subject.empty ? '1px dashed var(--cs-border-str)' : '1px solid var(--cs-border)',
-                borderRadius: 'var(--cs-radius-xl)',
-                cursor: 'pointer',
-                transition: 'border-color 0.1s',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--cs-border-str)')}
-              onMouseLeave={e => (e.currentTarget.style.borderColor = subject.empty ? 'var(--cs-border-str)' : 'var(--cs-border)')}
-            >
-              <h3 style={{ fontSize: 14, fontWeight: 600, margin: 0, letterSpacing: '-0.01em', color: 'var(--cs-ink)' }}>
-                {subject.name}
-              </h3>
+        recent.map(doc => (
+          <div
+            key={doc.id}
+            onClick={() => router.push(`/posts/${doc.id}`)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 11,
+              padding: '11px 4px',
+              borderBottom: '1px solid var(--cs-border)',
+              cursor: 'pointer', transition: 'background 0.1s',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--cs-hover-row)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >
+            <TagChip tag={doc.tag} />
 
-              <div style={{ fontSize: 12, color: 'var(--cs-ink-faint)', marginTop: 3 }}>
-                {subject.professor} 교수님 · {subject.semester}학기
-              </div>
+            <span style={{ fontSize: 13.5, color: 'var(--cs-ink)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {doc.title}
+            </span>
 
-              <div style={{
-                fontSize: 11.5, marginTop: 14,
-                color: subject.empty ? 'var(--cs-purple)' : 'var(--cs-ink-faint)',
-              }}>
-                {subject.empty
-                  ? '아직 노트가 없어요 · 첫 노트 쓰기'
-                  : `노트 ${subject.docCount}개 · ${subject.latestTime}`
-                }
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Recent notes */}
-      <SectionLabel>최근 올라온 노트</SectionLabel>
-
-      <div style={{ borderTop: '1px solid var(--cs-border)' }}>
-        {recent.length === 0 && !isLoading ? (
-          <div style={{ padding: '11px 4px', fontSize: 12.5, color: 'var(--cs-ink-faint)' }}>
-            아직 올라온 노트가 없어요
+            <span style={{ fontSize: 12, color: 'var(--cs-ink-faint)', flexShrink: 0 }}>
+              {doc.subjectName}
+              <span style={{ marginLeft: 12 }}>{doc.author}</span>
+              <span style={{ marginLeft: 12 }}>{doc.timeAgo}</span>
+              <span style={{ marginLeft: 12 }}>댓글 {doc.comments}</span>
+            </span>
           </div>
-        ) : (
-          recent.map(doc => (
-            <div
-              key={doc.id}
-              onClick={() => router.push(`/posts/${doc.id}`)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 11,
-                padding: '11px 4px',
-                borderBottom: '1px solid var(--cs-border)',
-                cursor: 'pointer', transition: 'background 0.1s',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--cs-hover-row)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-            >
-              <TagChip tag={doc.tag} />
-
-              <span style={{ fontSize: 13.5, color: 'var(--cs-ink)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {doc.title}
-              </span>
-
-              <span style={{ fontSize: 12, color: 'var(--cs-ink-faint)', flexShrink: 0 }}>
-                {doc.subjectName}
-                <span style={{ marginLeft: 12 }}>{doc.author}</span>
-                <span style={{ marginLeft: 12 }}>{doc.timeAgo}</span>
-                <span style={{ marginLeft: 12 }}>댓글 {doc.comments}</span>
-              </span>
-            </div>
-          ))
-        )}
-      </div>
+        ))
+      )}
     </div>
-  )
+  </div>
+)
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
