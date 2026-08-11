@@ -13,6 +13,12 @@
   font-weight: 500;
 }
 
+.emptySubjects {
+  margin: 0 0 30px;
+  color: var(--cs-ink-faint);
+  font-size: 13px;
+}
+
 .subjectGrid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
