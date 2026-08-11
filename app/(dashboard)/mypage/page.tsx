@@ -16,6 +16,7 @@ type DocItem = {
   comments: number;
   subjectName: string;
   isPublished: boolean;
+  isAdminHidden: boolean;
   purchasedAt?: string;
 };
 
@@ -50,6 +51,7 @@ type PostRelation = {
   created_at: string;
   comment_count: number | null;
   is_published: boolean;
+  is_admin_hidden: boolean;
   course_offerings:
   | CourseRelation
   | CourseRelation[]
@@ -204,6 +206,7 @@ function toDocItem(post: PostRelation): DocItem {
     comments: post.comment_count ?? 0,
     subjectName: subject?.name ?? "",
     isPublished: post.is_published,
+    isAdminHidden: post.is_admin_hidden,
   };
 }
 
@@ -336,6 +339,7 @@ export default function MyPage() {
               created_at,
               comment_count,
               is_published,
+              is_admin_hidden,
               course_offerings (
                 id,
                 subjects (
@@ -658,10 +662,15 @@ export default function MyPage() {
   };
 
   const publishedDocs = myDocs.filter(
-    (doc) => doc.isPublished,
+    (doc) =>
+      doc.isPublished &&
+      !doc.isAdminHidden,
   );
+
   const stoppedDocs = myDocs.filter(
-    (doc) => !doc.isPublished,
+    (doc) =>
+      !doc.isPublished ||
+      doc.isAdminHidden,
   );
 
   const totalPoints = balance;
@@ -1163,7 +1172,7 @@ function PurchasedDocList({
                 {doc.title}
               </div>
 
-              {!doc.isPublished && (
+              {(!doc.isPublished || doc.isAdminHidden) && (
                 <span
                   style={{
                     flexShrink: 0,
@@ -1175,7 +1184,7 @@ function PurchasedDocList({
                     fontWeight: 600,
                   }}
                 >
-                  게시 중단
+                  {doc.isAdminHidden ? '관리자 게시 중단' : '게시 중단'}
                 </span>
               )}
             </div>
@@ -1271,13 +1280,23 @@ function DocList({
                 flexShrink: 0,
                 padding: '2px 7px',
                 borderRadius: 'var(--cs-radius-xs)',
-                background: doc.isPublished ? 'var(--cs-ref-bg)' : 'var(--cs-bg)',
-                color: doc.isPublished ? 'var(--cs-ref-fg)' : 'var(--cs-ink-faint)',
+                background:
+                  doc.isPublished && !doc.isAdminHidden
+                    ? 'var(--cs-ref-bg)'
+                    : 'var(--cs-bg)',
+                color:
+                  doc.isPublished && !doc.isAdminHidden
+                    ? 'var(--cs-ref-fg)'
+                    : 'var(--cs-ink-faint)',
                 fontSize: 10.5,
                 fontWeight: 600,
               }}
             >
-              {doc.isPublished ? '판매 중' : '게시 중단'}
+              {doc.isAdminHidden
+                ? '관리자 게시 중단'
+                : doc.isPublished
+                  ? '판매 중'
+                  : '게시 중단'}
             </span>
           )}
           <span style={{ fontSize: 12, color: 'var(--cs-ink-faint)', flexShrink: 0 }}>댓글 {doc.comments}</span>

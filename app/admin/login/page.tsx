@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase/browser";
+import { supabase } from "@/lib/supabase";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -54,7 +54,7 @@ export default function AdminLoginPage() {
       style={{
         minHeight: "100vh",
         display: "grid",
-        gridTemplateColumns: "minmax(360px, 0.85fr) minmax(520px, 1.15fr)",
+        gridTemplateColumns: "45% 55%",
         fontFamily:
           'Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
         background: "#faf9fd",

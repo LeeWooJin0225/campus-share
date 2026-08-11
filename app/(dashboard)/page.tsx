@@ -79,7 +79,8 @@ async function fetchNoteCounts(
     .from("posts")
     .select("course_offering_id")
     .in("course_offering_id", offeringIds)
-    .eq("is_published", true);
+    .eq("is_published", true)
+    .eq("is_admin_hidden", false);
 
   if (error) {
     console.error("노트 개수 조회 실패:", error);
@@ -239,6 +240,7 @@ export default function HomePage() {
               )
             `)
             .eq("is_published", true)
+            .eq("is_admin_hidden", false)
             .order("created_at", { ascending: false })
             .limit(4);
 

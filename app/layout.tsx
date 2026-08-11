@@ -1,5 +1,7 @@
 import "./globals.css";
 
+import UserAccessGuard from "@/components/auth/UserAccessGuard";
+
 export const metadata = {
   title: "CampusShare",
   description: "성신여대 학생들을 위한 학습 자료 공유 서비스",
@@ -8,11 +10,15 @@ export const metadata = {
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang="ko">
+      <body>
+        <UserAccessGuard>
+          {children}
+        </UserAccessGuard>
+      </body>
     </html>
-  )
+  );
 }

@@ -2,7 +2,9 @@
 
 import { ReactNode, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase/browser";
+
+import AdminSidebar from "@/components/admin/AdminSidebar";
+import { supabase } from "@/lib/supabase";
 
 export default function AdminLayout({
   children,
@@ -11,10 +13,12 @@ export default function AdminLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [checking, setChecking] = useState(pathname !== "/admin/login");
+  const isLoginPage = pathname === "/admin/login";
+
+  const [checking, setChecking] = useState(!isLoginPage);
 
   useEffect(() => {
-    if (pathname === "/admin/login") {
+    if (isLoginPage) {
       setChecking(false);
       return;
     }
@@ -22,6 +26,8 @@ export default function AdminLayout({
     let cancelled = false;
 
     async function checkAdmin() {
+      setChecking(true);
+
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -44,15 +50,21 @@ export default function AdminLayout({
         return;
       }
 
-      if (!cancelled) setChecking(false);
+      if (!cancelled) {
+        setChecking(false);
+      }
     }
 
-    checkAdmin();
+    void checkAdmin();
 
     return () => {
       cancelled = true;
     };
-  }, [pathname, router]);
+  }, [isLoginPage, pathname, router]);
+
+  if (isLoginPage) {
+    return <>{children}</>;
+  }
 
   if (checking) {
     return (
@@ -72,5 +84,25 @@ export default function AdminLayout({
     );
   }
 
-  return <>{children}</>;
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "stretch",
+        background: "#f8f8fb",
+      }}
+    >
+      <AdminSidebar />
+
+      <div
+        style={{
+          minWidth: 0,
+          flex: 1,
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
 }

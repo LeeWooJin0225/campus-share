@@ -9,6 +9,15 @@ import { supabase } from "@/lib/supabase";
 
 const LIKES_ENABLED = true;
 
+const REPORT_REASONS = [
+  { code: "inappropriate", label: "부적절한 콘텐츠" },
+  { code: "abuse", label: "욕설·괴롭힘" },
+  { code: "spam", label: "중복·도배 게시글" },
+  { code: "copyright", label: "저작권 침해" },
+  { code: "incorrect", label: "허위·잘못된 자료" },
+  { code: "other", label: "기타" },
+] as const;
+
 type DocInfo = {
   id: string;
   title: string;
@@ -78,6 +87,7 @@ type PostRow = {
   course_offering_id: string;
   price: number;
   is_published: boolean;
+  is_admin_hidden: boolean;
   ai_summary: string | null;
   profiles:
   | { nickname: string | null; is_deleted: boolean | null }
@@ -227,6 +237,12 @@ export default function DocumentPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState("");
+  const [reportDescription, setReportDescription] = useState("");
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+  const [reportToast, setReportToast] = useState("");
+
   const [aiSummary, setAiSummary] =
     useState<string | null>(null);
   const [isGeneratingSummary, setIsGeneratingSummary] =
@@ -266,6 +282,7 @@ export default function DocumentPage() {
               course_offering_id,
               price,
               is_published,
+              is_admin_hidden,
               ai_summary,
               profiles:profiles!posts_author_id_fkey (
                 nickname,
@@ -286,6 +303,7 @@ export default function DocumentPage() {
               )
             `)
             .eq("id", docId)
+            .eq("is_admin_hidden", false)
             .single();
 
         if (postError) {
@@ -645,6 +663,78 @@ export default function DocumentPage() {
       isEdited: false,
     }]);
   }
+
+  const submitReport = async () => {
+    if (!doc || !reportReason || isSubmittingReport) {
+      return;
+    }
+
+    if (
+      reportReason === "other" &&
+      !reportDescription.trim()
+    ) {
+      return;
+    }
+
+    try {
+      setIsSubmittingReport(true);
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        throw new Error("로그인이 필요합니다.");
+      }
+
+      const response = await fetch("/api/reports", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          postId: doc.id,
+          reason: reportReason,
+          description:
+            reportDescription.trim(),
+        }),
+      });
+
+      const result =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.error ??
+          "신고를 접수하지 못했습니다.",
+        );
+      }
+
+      setShowReportModal(false);
+      setReportReason("");
+      setReportDescription("");
+      setReportToast(
+        "신고가 접수되었습니다.",
+      );
+
+      window.setTimeout(() => {
+        setReportToast("");
+      }, 3000);
+    } catch (error) {
+      setReportToast(
+        error instanceof Error
+          ? error.message
+          : "신고를 접수하지 못했습니다.",
+      );
+
+      window.setTimeout(() => {
+        setReportToast("");
+      }, 3000);
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
 
   const purchasePost = async () => {
     if (
@@ -1538,6 +1628,29 @@ export default function DocumentPage() {
                       : "삭제"}
                 </button>
               </>
+            )}
+
+            {doc.authorId !== userId && (
+              <button
+                type="button"
+                onClick={() => {
+                  setReportReason("");
+                  setReportDescription("");
+                  setShowReportModal(true);
+                }}
+                style={{
+                  fontSize: 12,
+                  color: "var(--cs-error)",
+                  background: "var(--cs-surface)",
+                  border: "1px solid var(--cs-border-str)",
+                  padding: "5px 10px",
+                  borderRadius: "var(--cs-radius-md)",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                신고
+              </button>
             )}
 
             <button
@@ -2747,6 +2860,290 @@ export default function DocumentPage() {
           </div>
         )}
       </div>
+
+      {showReportModal && (
+        <div
+          role="presentation"
+          onClick={() => {
+            if (!isSubmittingReport) {
+              setShowReportModal(false);
+            }
+          }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1000,
+            display: "grid",
+            placeItems: "center",
+            padding: 20,
+            background: "rgba(25, 22, 34, 0.4)",
+            backdropFilter: "blur(3px)",
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) =>
+              event.stopPropagation()
+            }
+            style={{
+              width: "100%",
+              maxWidth: 460,
+              maxHeight: "90vh",
+              overflowY: "auto",
+              padding: 22,
+              boxSizing: "border-box",
+              border: "1px solid var(--cs-border)",
+              borderRadius: 14,
+              background: "var(--cs-surface)",
+              boxShadow: "var(--cs-shadow-dropdown)",
+            }}
+          >
+            <h2
+              style={{
+                margin: "0 0 7px",
+                color: "var(--cs-ink)",
+                fontSize: 18,
+              }}
+            >
+              게시글 신고
+            </h2>
+
+            <p
+              style={{
+                margin: 0,
+                color: "var(--cs-ink-soft)",
+                fontSize: 12,
+                lineHeight: 1.7,
+              }}
+            >
+              신고 사유를 선택해 주세요. 신고 내용은 관리자에게 전달됩니다.
+            </p>
+
+            <div
+              style={{
+                marginTop: 16,
+                display: "grid",
+                gridTemplateColumns:
+                  "repeat(2, minmax(0, 1fr))",
+                gap: 8,
+              }}
+            >
+              {REPORT_REASONS.map(
+                (reason) => {
+                  const selected =
+                    reportReason ===
+                    reason.code;
+
+                  return (
+                    <button
+                      key={reason.code}
+                      type="button"
+                      onClick={() =>
+                        setReportReason(
+                          reason.code,
+                        )
+                      }
+                      style={{
+                        minHeight: 40,
+                        border: selected
+                          ? "1px solid var(--cs-purple)"
+                          : "1px solid var(--cs-border)",
+                        borderRadius:
+                          "var(--cs-radius-md)",
+                        background: selected
+                          ? "var(--cs-purple-bg)"
+                          : "var(--cs-surface)",
+                        color: selected
+                          ? "var(--cs-purple-dark)"
+                          : "var(--cs-ink-soft)",
+                        fontFamily:
+                          "inherit",
+                        fontSize: 11.5,
+                        fontWeight: selected
+                          ? 700
+                          : 500,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {reason.label}
+                    </button>
+                  );
+                },
+              )}
+            </div>
+
+            {reportReason && (
+              <label
+                style={{
+                  display: "grid",
+                  gap: 6,
+                  marginTop: 15,
+                }}
+              >
+                <span
+                  style={{
+                    color: "var(--cs-ink-soft)",
+                    fontSize: 11.5,
+                    fontWeight: 600,
+                  }}
+                >
+                  {reportReason === "other"
+                    ? "상세 사유"
+                    : "추가 설명 (선택)"}
+                </span>
+
+                <textarea
+                  value={reportDescription}
+                  onChange={(event) =>
+                    setReportDescription(
+                      event.target.value,
+                    )
+                  }
+                  rows={3}
+                  placeholder={
+                    reportReason === "other"
+                      ? "신고 사유를 입력해 주세요."
+                      : "필요한 경우 세부 내용을 적어주세요."
+                  }
+                  style={{
+                    width: "100%",
+                    minHeight: 82,
+                    boxSizing: "border-box",
+                    resize: "vertical",
+                    border:
+                      "1px solid var(--cs-border-str)",
+                    borderRadius:
+                      "var(--cs-radius-md)",
+                    padding: "9px 10px",
+                    outline: "none",
+                    background:
+                      "var(--cs-surface)",
+                    color: "var(--cs-ink)",
+                    fontFamily: "inherit",
+                    fontSize: 12,
+                    lineHeight: 1.6,
+                  }}
+                />
+              </label>
+            )}
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent:
+                  "flex-end",
+                gap: 8,
+                marginTop: 18,
+              }}
+            >
+              <button
+                type="button"
+                disabled={
+                  isSubmittingReport
+                }
+                onClick={() =>
+                  setShowReportModal(false)
+                }
+                style={{
+                  height: 38,
+                  padding: "0 14px",
+                  border:
+                    "1px solid var(--cs-border-str)",
+                  borderRadius:
+                    "var(--cs-radius-md)",
+                  background:
+                    "var(--cs-surface)",
+                  color:
+                    "var(--cs-ink-soft)",
+                  fontFamily: "inherit",
+                  fontSize: 12,
+                  cursor:
+                    isSubmittingReport
+                      ? "not-allowed"
+                      : "pointer",
+                }}
+              >
+                취소
+              </button>
+
+              <button
+                type="button"
+                disabled={
+                  !reportReason ||
+                  (reportReason ===
+                    "other" &&
+                    !reportDescription.trim()) ||
+                  isSubmittingReport
+                }
+                onClick={() =>
+                  void submitReport()
+                }
+                style={{
+                  height: 38,
+                  padding: "0 15px",
+                  border: 0,
+                  borderRadius:
+                    "var(--cs-radius-md)",
+                  background:
+                    "var(--cs-error)",
+                  color: "#fff",
+                  fontFamily:
+                    "inherit",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor:
+                    !reportReason ||
+                    (reportReason ===
+                      "other" &&
+                      !reportDescription.trim()) ||
+                    isSubmittingReport
+                      ? "not-allowed"
+                      : "pointer",
+                  opacity:
+                    !reportReason ||
+                    (reportReason ===
+                      "other" &&
+                      !reportDescription.trim()) ||
+                    isSubmittingReport
+                      ? 0.5
+                      : 1,
+                }}
+              >
+                {isSubmittingReport
+                  ? "접수 중..."
+                  : "신고 접수"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {reportToast && (
+        <div
+          style={{
+            position: "fixed",
+            right: 24,
+            bottom: 24,
+            zIndex: 1100,
+            maxWidth: 340,
+            padding: "12px 14px",
+            borderRadius: 10,
+            border:
+              "1px solid var(--cs-border)",
+            background:
+              "var(--cs-surface)",
+            color:
+              "var(--cs-ink-soft)",
+            boxShadow:
+              "var(--cs-shadow-dropdown)",
+            fontSize: 11.5,
+            fontWeight: 650,
+          }}
+        >
+          {reportToast}
+        </div>
+      )}
     </div>
   );
 }

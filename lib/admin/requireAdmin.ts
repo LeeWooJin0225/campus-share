@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { supabaseAdmin } from "@/lib/admin/supabaseAdmin";
 
 export async function requireAdmin(request: NextRequest) {
   const authorization = request.headers.get("authorization");
