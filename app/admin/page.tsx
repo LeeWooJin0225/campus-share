@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase/browser";
+import { supabase } from "@/lib/supabase";
 
 type DashboardData = {
   admin: {
@@ -61,12 +61,6 @@ const EMPTY_DATA: DashboardData = {
   recentActions: [],
 };
 
-const navItems = [
-  { icon: "⌂", label: "대시보드", href: "/admin", active: true },
-  { icon: "⚑", label: "신고 관리", href: "/admin/reports" },
-  { icon: "▤", label: "게시글 관리", href: "/admin/posts" },
-  { icon: "◯", label: "회원 관리", href: "/admin/users" },
-];
 
 const reasonLabel: Record<string, string> = {
   inappropriate: "부적절한 내용",
@@ -207,6 +201,7 @@ export default function AdminDashboardPage() {
     await supabase.auth.signOut();
     router.replace("/admin/login");
   }
+
 
   if (loading) {
     return <div className="admin-loading">관리자 대시보드를 불러오는 중...</div>;
@@ -620,60 +615,6 @@ export default function AdminDashboardPage() {
         }
       `}</style>
 
-      <div className="admin-shell">
-        <aside className="admin-sidebar">
-          <div className="admin-logo">
-            <span className="admin-logo-mark">C</span>
-            <span>
-              CampusShare
-              <span style={{ color: "#2e2936", fontWeight: 500 }}> Admin</span>
-            </span>
-          </div>
-
-          <nav className="admin-nav">
-            {navItems.map((item) => (
-              <button
-                key={item.label}
-                type="button"
-                className={`admin-nav-button ${item.active ? "active" : ""}`}
-                onClick={() => router.push(item.href)}
-              >
-                <span style={{ width: 20, textAlign: "center" }}>{item.icon}</span>
-                {item.label}
-                {item.label === "신고 관리" && data.stats.pendingReports > 0 && (
-                  <span
-                    style={{
-                      marginLeft: "auto",
-                      minWidth: 20,
-                      height: 20,
-                      padding: "0 6px",
-                      borderRadius: 999,
-                      display: "grid",
-                      placeItems: "center",
-                      background: "#ef667b",
-                      color: "#fff",
-                      fontSize: 9px,
-                      fontWeight: 850,
-                    }}
-                  >
-                    {data.stats.pendingReports}
-                  </span>
-                )}
-              </button>
-            ))}
-          </nav>
-
-          <div className="admin-side-bottom">
-            <div className="admin-school-card">
-              <div className="admin-school-title">CampusShare</div>
-              <div className="admin-school-sub">SUNGSHIN UNIVERSITY</div>
-              <button className="admin-site-button" onClick={() => router.push("/")}>
-                사이트 바로가기 ↗
-              </button>
-            </div>
-          </div>
-        </aside>
-
         <main className="admin-main">
           <header className="admin-header">
             <div>
@@ -940,7 +881,6 @@ export default function AdminDashboardPage() {
             </article>
           </section>
         </main>
-      </div>
     </>
   );
 }

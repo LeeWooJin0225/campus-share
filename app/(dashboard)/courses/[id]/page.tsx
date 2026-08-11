@@ -327,6 +327,7 @@ export default function CoursePage() {
           `)
             .in("course_offering_id", offeringIds)
             .eq("is_published", true)
+            .eq("is_admin_hidden", false)
             .eq("is_deleted", false)
             .order("created_at", { ascending: false });
 
