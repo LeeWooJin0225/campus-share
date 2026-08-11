@@ -267,7 +267,7 @@ export default function DocumentPage() {
               price,
               is_published,
               ai_summary,
-              profiles:author_id (
+              profiles:profiles!posts_author_id_fkey (
                 nickname,
                 is_deleted
               ),
@@ -461,7 +461,7 @@ export default function DocumentPage() {
               created_at,
               updated_at,
               is_anonymous,
-              profiles:author_id (
+              profiles:profiles!comments_author_id_fkey (
                 nickname,
                 avatar_url,
                 is_deleted
@@ -603,9 +603,10 @@ export default function DocumentPage() {
         created_at,
         updated_at,
         is_anonymous,
-        profiles:author_id (
+        profiles:profiles!comments_author_id_fkey (
           nickname,
-          avatar_url
+          avatar_url,
+          is_deleted
         )
       `)
       .single();
@@ -763,7 +764,7 @@ export default function DocumentPage() {
       if (!response.ok) {
         throw new Error(
           result.error ??
-            "AI 요약을 생성하지 못했습니다.",
+          "AI 요약을 생성하지 못했습니다.",
         );
       }
 
@@ -773,10 +774,10 @@ export default function DocumentPage() {
       setDoc((previous) =>
         previous
           ? {
-              ...previous,
-              aiSummary:
-                result.summary ?? null,
-            }
+            ...previous,
+            aiSummary:
+              result.summary ?? null,
+          }
           : previous,
       );
     } catch (error) {
@@ -917,9 +918,10 @@ export default function DocumentPage() {
           created_at,
           updated_at,
           is_anonymous,
-          profiles:author_id (
+          profiles:profiles!comments_author_id_fkey (
             nickname,
-            avatar_url
+            avatar_url,
+            is_deleted
           )
         `)
         .single();
@@ -1550,8 +1552,8 @@ export default function DocumentPage() {
                   ? "var(--cs-purple-bg)"
                   : "var(--cs-surface)",
                 border: `1px solid ${bookmarked
-                    ? "var(--cs-purple-border)"
-                    : "var(--cs-border-str)"
+                  ? "var(--cs-purple-border)"
+                  : "var(--cs-border-str)"
                   }`,
                 padding: "5px 11px",
                 borderRadius:
@@ -1839,38 +1841,38 @@ export default function DocumentPage() {
                 {!aiSummaryError.includes(
                   "요약할 내용이 부족",
                 ) && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void generateAiSummary()
-                    }
-                    disabled={
-                      isGeneratingSummary
-                    }
-                    style={{
-                      marginTop: 9,
-                      border:
-                        "1px solid var(--cs-border-str)",
-                      borderRadius:
-                        "var(--cs-radius-md)",
-                      padding: "6px 10px",
-                      background:
-                        "var(--cs-surface)",
-                      color:
-                        "var(--cs-ink)",
-                      fontFamily:
-                        "inherit",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      cursor:
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void generateAiSummary()
+                      }
+                      disabled={
                         isGeneratingSummary
-                          ? "not-allowed"
-                          : "pointer",
-                    }}
-                  >
-                    다시 시도
-                  </button>
-                )}
+                      }
+                      style={{
+                        marginTop: 9,
+                        border:
+                          "1px solid var(--cs-border-str)",
+                        borderRadius:
+                          "var(--cs-radius-md)",
+                        padding: "6px 10px",
+                        background:
+                          "var(--cs-surface)",
+                        color:
+                          "var(--cs-ink)",
+                        fontFamily:
+                          "inherit",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor:
+                          isGeneratingSummary
+                            ? "not-allowed"
+                            : "pointer",
+                      }}
+                    >
+                      다시 시도
+                    </button>
+                  )}
               </div>
             )}
 
