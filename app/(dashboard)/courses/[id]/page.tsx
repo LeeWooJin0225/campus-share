@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 
 import TagChip, { TagType } from "@/components/common/TagChip";
 import { supabase } from "@/lib/supabase";
@@ -151,10 +151,28 @@ function formatRelativeDate(dateString: string) {
 export default function CoursePage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+
   const courseId = params.id;
+  const typeParam = searchParams.get("type");
 
   const [activeTab, setActiveTab] =
     useState<FilterKey>("all");
+
+  /* 상세 페이지에서 분류 페이지로 이동할 때 */
+  useEffect(() => {
+    if (
+      typeParam === "notes" ||
+      typeParam === "exam" ||
+      typeParam === "reference" ||
+      typeParam === "study_trail"
+    ) {
+      setActiveTab(typeParam);
+      return;
+    }
+
+    setActiveTab("all");
+  }, [typeParam]);
 
   /* 과목 내 검색어 — 페이지 이동이 없으므로 URL은 쓰지 않습니다 */
   const [docKeyword, setDocKeyword] = useState("");
@@ -723,7 +741,16 @@ export default function CoursePage() {
             return (
               <button
                 key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
+                onClick={() => {
+                  setActiveTab(tab.key);
+
+                  if (tab.key === "all") {
+                    router.push(`/courses/${courseId}`);
+                    return;
+                  }
+
+                  router.push(`/courses/${courseId}?type=${tab.key}`);
+                }}
                 style={{
                   background: 'none', border: 'none',
                   padding: '0 0 10px', fontSize: 13,

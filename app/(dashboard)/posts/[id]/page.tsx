@@ -18,6 +18,18 @@ const REPORT_REASONS = [
   { code: "other", label: "기타" },
 ] as const;
 
+type ConfirmModalState =
+  | { kind: "purchase" }
+  | { kind: "stopPost" }
+  | { kind: "deletePost" };
+
+const TYPE_LABELS: Record<TagType, string> = {
+  notes: "Notes",
+  study_trail: "Study Trail",
+  exam: "Exam",
+  reference: "Reference",
+};
+
 type DocInfo = {
   id: string;
   title: string;
@@ -238,6 +250,8 @@ export default function DocumentPage() {
   const [errorMessage, setErrorMessage] = useState("");
 
   const [showReportModal, setShowReportModal] = useState(false);
+  const [confirmModal, setConfirmModal] =
+    useState<ConfirmModalState | null>(null);
   const [reportReason, setReportReason] = useState("");
   const [reportDescription, setReportDescription] = useState("");
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
@@ -736,7 +750,7 @@ export default function DocumentPage() {
     }
   };
 
-  const purchasePost = async () => {
+  const purchasePost = () => {
     if (
       !doc ||
       !doc.isPublished ||
@@ -747,16 +761,23 @@ export default function DocumentPage() {
       return;
     }
 
-    const confirmed = window.confirm(
-      "1포인트를 사용해 이 글을 구매할까요?",
-    );
+    setConfirmModal({ kind: "purchase" });
+  };
 
-    if (!confirmed) {
+  const confirmPurchasePost = async () => {
+    if (
+      !doc ||
+      !doc.isPublished ||
+      doc.authorId === userId ||
+      hasPurchased ||
+      isPurchasing
+    ) {
       return;
     }
 
     try {
       setIsPurchasing(true);
+      setConfirmModal(null);
 
       const {
         data,
@@ -787,20 +808,26 @@ export default function DocumentPage() {
         ),
       );
 
-      alert(
-        "구매가 완료되었습니다.",
-      );
+      setReportToast("구매가 완료되었습니다.");
+
+      window.setTimeout(() => {
+        setReportToast("");
+      }, 3000);
     } catch (error) {
       console.error(
         "게시글 구매 실패:",
         error,
       );
 
-      alert(
+      setReportToast(
         error instanceof Error
           ? error.message
           : "게시글을 구매하지 못했습니다.",
       );
+
+      window.setTimeout(() => {
+        setReportToast("");
+      }, 3000);
     } finally {
       setIsPurchasing(false);
     }
@@ -1135,7 +1162,7 @@ export default function DocumentPage() {
     router.push(`/posts/${docId}/edit`);
   };
 
-  const deletePost = async () => {
+  const deletePost = () => {
     if (
       !doc ||
       doc.authorId !== userId ||
@@ -1151,78 +1178,101 @@ export default function DocumentPage() {
      */
     if (purchaseCount > 0) {
       if (!doc.isPublished) {
-        alert("이미 게시 중단된 글입니다.");
+        setReportToast("이미 게시 중단된 글입니다.");
+
+        window.setTimeout(() => {
+          setReportToast("");
+        }, 3000);
+
         return;
       }
 
-      const confirmed = window.confirm(
-        `이 글은 ${purchaseCount}명이 구매했어요.\n완전히 삭제할 수 없으며 게시 중단 처리됩니다.\n기존 구매자는 계속 열람할 수 있어요.\n\n게시 중단할까요?`,
-      );
-
-      if (!confirmed) {
-        return;
-      }
-
-      try {
-        setIsDeletingPost(true);
-
-        const { error } = await supabase
-          .from("posts")
-          .update({
-            is_published: false,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", docId)
-          .eq("author_id", userId);
-
-        if (error) {
-          throw error;
-        }
-
-        setDoc((previous) =>
-          previous
-            ? {
-              ...previous,
-              isPublished: false,
-            }
-            : previous,
-        );
-
-        alert(
-          "게시가 중단되었습니다. 기존 구매자는 계속 자료를 볼 수 있어요.",
-        );
-        router.replace(
-          `/courses/${doc.courseOfferingId}`,
-        );
-        router.refresh();
-      } catch (error) {
-        console.error(
-          "게시글 게시 중단 실패:",
-          error,
-        );
-
-        alert(
-          error instanceof Error
-            ? `게시글을 게시 중단하지 못했습니다.\n${error.message}`
-            : "게시글을 게시 중단하지 못했습니다.",
-        );
-      } finally {
-        setIsDeletingPost(false);
-      }
-
+      setConfirmModal({ kind: "stopPost" });
       return;
     }
 
-    const confirmed = window.confirm(
-      "아직 구매자가 없는 글입니다.\n게시글을 완전히 삭제할까요?\n삭제한 글은 되돌릴 수 없습니다.",
-    );
+    setConfirmModal({ kind: "deletePost" });
+  };
 
-    if (!confirmed) {
+  const confirmStopPost = async () => {
+    if (
+      !doc ||
+      doc.authorId !== userId ||
+      isDeletingPost
+    ) {
       return;
     }
 
     try {
       setIsDeletingPost(true);
+      setConfirmModal(null);
+
+      const { error } = await supabase
+        .from("posts")
+        .update({
+          is_published: false,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", docId)
+        .eq("author_id", userId);
+
+      if (error) {
+        throw error;
+      }
+
+      setDoc((previous) =>
+        previous
+          ? {
+            ...previous,
+            isPublished: false,
+          }
+          : previous,
+      );
+
+      setReportToast(
+        "게시가 중단되었습니다. 기존 구매자는 계속 자료를 볼 수 있어요.",
+      );
+
+      window.setTimeout(() => {
+        setReportToast("");
+      }, 3000);
+
+      router.replace(
+        `/courses/${doc.courseOfferingId}`,
+      );
+      router.refresh();
+    } catch (error) {
+      console.error(
+        "게시글 게시 중단 실패:",
+        error,
+      );
+
+      setReportToast(
+        error instanceof Error
+          ? `게시글을 게시 중단하지 못했습니다. ${error.message}`
+          : "게시글을 게시 중단하지 못했습니다.",
+      );
+
+      window.setTimeout(() => {
+        setReportToast("");
+      }, 3000);
+    } finally {
+      setIsDeletingPost(false);
+    }
+  };
+
+  const confirmDeletePost = async () => {
+    if (
+      !doc ||
+      doc.authorId !== userId ||
+      isDeletingPost
+    ) {
+      return;
+    }
+
+    try {
+      setIsDeletingPost(true);
+      setConfirmModal(null);
 
       const {
         data: attachmentRows,
@@ -1270,7 +1320,12 @@ export default function DocumentPage() {
         }
       }
 
-      alert("게시글이 삭제되었습니다.");
+      setReportToast("게시글이 삭제되었습니다.");
+
+      window.setTimeout(() => {
+        setReportToast("");
+      }, 3000);
+
       router.replace(
         `/courses/${doc.courseOfferingId}`,
       );
@@ -1278,11 +1333,15 @@ export default function DocumentPage() {
     } catch (error) {
       console.error("게시글 삭제 실패:", error);
 
-      alert(
+      setReportToast(
         error instanceof Error
-          ? `게시글을 삭제하지 못했습니다.\n${error.message}`
+          ? `게시글을 삭제하지 못했습니다. ${error.message}`
           : "게시글을 삭제하지 못했습니다.",
       );
+
+      window.setTimeout(() => {
+        setReportToast("");
+      }, 3000);
     } finally {
       setIsDeletingPost(false);
     }
@@ -1495,6 +1554,23 @@ export default function DocumentPage() {
   }
 
 
+  const handleConfirmModal = async () => {
+    if (!confirmModal) return;
+
+    if (confirmModal.kind === "purchase") {
+      await confirmPurchasePost();
+      return;
+    }
+
+    if (confirmModal.kind === "stopPost") {
+      await confirmStopPost();
+      return;
+    }
+
+    await confirmDeletePost();
+  };
+
+
   if (isLoading) {
     return (
       <div style={{ height: '100%', overflowY: 'auto', background: 'var(--cs-surface)' }}>
@@ -1519,6 +1595,33 @@ export default function DocumentPage() {
     doc.authorId === userId ||
     hasPurchased;
 
+  const confirmModalText =
+    confirmModal?.kind === "purchase"
+      ? {
+        title: "자료를 구매할까요?",
+        description: `1포인트를 사용해 이 글의 본문과 첨부파일, 댓글을 열람할 수 있어요.\n현재 보유 포인트는 ${walletBalance}P입니다.`,
+        confirmLabel: isPurchasing ? "구매 중..." : "1P로 구매하기",
+        danger: false,
+        disabled: isPurchasing || walletBalance < 1,
+      }
+      : confirmModal?.kind === "stopPost"
+        ? {
+          title: "게시를 중단할까요?",
+          description: `이 글은 ${purchaseCount}명이 구매했어요.\n완전히 삭제할 수 없으며 게시 중단 처리됩니다.\n기존 구매자는 계속 자료를 볼 수 있어요.`,
+          confirmLabel: isDeletingPost ? "중단 중..." : "게시 중단",
+          danger: true,
+          disabled: isDeletingPost,
+        }
+        : confirmModal?.kind === "deletePost"
+          ? {
+            title: "게시글을 삭제할까요?",
+            description: "아직 구매자가 없는 글입니다.\n삭제한 글은 되돌릴 수 없습니다.",
+            confirmLabel: isDeletingPost ? "삭제 중..." : "삭제하기",
+            danger: true,
+            disabled: isDeletingPost,
+          }
+          : null;
+
   return (
     <div style={{ height: '100%', overflowY: 'auto', background: 'var(--cs-surface)' }}>
       <div style={{ maxWidth: 660, margin: '0 auto', padding: '24px 26px 80px' }}>
@@ -1537,7 +1640,23 @@ export default function DocumentPage() {
             onMouseLeave={e => (e.currentTarget.style.color = 'var(--cs-ink-faint)')}
           >{subject.name}</span>
           {' / '}
-          <span style={{ color: 'var(--cs-ink)' }}>노트</span>
+          <span
+            style={{
+              color: "var(--cs-ink)",
+              cursor: "pointer",
+            }}
+            onClick={() =>
+              router.push(`/courses/${doc.courseOfferingId}?type=${doc.tag}`)
+            }
+            onMouseEnter={(e) =>
+              (e.currentTarget.style.color = "var(--cs-purple-dark)")
+            }
+            onMouseLeave={(e) =>
+              (e.currentTarget.style.color = "var(--cs-ink)")
+            }
+          >
+            {TYPE_LABELS[doc.tag] ?? "자료"}
+          </span>
         </div>
 
         {/* Title */}
@@ -2861,6 +2980,178 @@ export default function DocumentPage() {
         )}
       </div>
 
+      {confirmModal && confirmModalText && (
+        <div
+          role="presentation"
+          onClick={() => {
+            if (
+              !isPurchasing &&
+              !isDeletingPost
+            ) {
+              setConfirmModal(null);
+            }
+          }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1000,
+            display: "grid",
+            placeItems: "center",
+            padding: 20,
+            background: "rgba(25, 22, 34, 0.4)",
+            backdropFilter: "blur(3px)",
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) =>
+              event.stopPropagation()
+            }
+            style={{
+              width: "100%",
+              maxWidth: 420,
+              padding: 22,
+              boxSizing: "border-box",
+              border: "1px solid var(--cs-border)",
+              borderRadius: 14,
+              background: "var(--cs-surface)",
+              boxShadow: "var(--cs-shadow-dropdown)",
+            }}
+          >
+            <div
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: "var(--cs-radius-full)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: 14,
+                background: confirmModalText.danger
+                  ? "rgba(220, 53, 69, 0.08)"
+                  : "var(--cs-purple-bg)",
+                color: confirmModalText.danger
+                  ? "var(--cs-error)"
+                  : "var(--cs-purple-dark)",
+                fontSize: 19,
+                fontWeight: 800,
+              }}
+            >
+              {confirmModalText.danger ? "!" : "P"}
+            </div>
+
+            <h2
+              style={{
+                margin: "0 0 8px",
+                color: "var(--cs-ink)",
+                fontSize: 18,
+                fontWeight: 750,
+                letterSpacing: "-0.02em",
+              }}
+            >
+              {confirmModalText.title}
+            </h2>
+
+            <p
+              style={{
+                margin: 0,
+                color: "var(--cs-ink-soft)",
+                fontSize: 12.5,
+                lineHeight: 1.75,
+                whiteSpace: "pre-wrap",
+              }}
+            >
+              {confirmModalText.description}
+            </p>
+
+            {confirmModal.kind === "purchase" &&
+              walletBalance < 1 && (
+                <div
+                  style={{
+                    marginTop: 13,
+                    padding: "10px 12px",
+                    borderRadius: "var(--cs-radius-md)",
+                    border: "1px solid var(--cs-border)",
+                    background: "var(--cs-bg)",
+                    color: "var(--cs-error)",
+                    fontSize: 11.5,
+                    lineHeight: 1.6,
+                  }}
+                >
+                  보유 포인트가 부족해서 구매할 수 없어요.
+                </div>
+              )}
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 8,
+                marginTop: 20,
+              }}
+            >
+              <button
+                type="button"
+                disabled={
+                  isPurchasing ||
+                  isDeletingPost
+                }
+                onClick={() =>
+                  setConfirmModal(null)
+                }
+                style={{
+                  height: 38,
+                  padding: "0 14px",
+                  border: "1px solid var(--cs-border-str)",
+                  borderRadius: "var(--cs-radius-md)",
+                  background: "var(--cs-surface)",
+                  color: "var(--cs-ink-soft)",
+                  fontFamily: "inherit",
+                  fontSize: 12,
+                  cursor:
+                    isPurchasing ||
+                      isDeletingPost
+                      ? "not-allowed"
+                      : "pointer",
+                }}
+              >
+                취소
+              </button>
+
+              <button
+                type="button"
+                disabled={confirmModalText.disabled}
+                onClick={() =>
+                  void handleConfirmModal()
+                }
+                style={{
+                  height: 38,
+                  padding: "0 15px",
+                  border: 0,
+                  borderRadius: "var(--cs-radius-md)",
+                  background: confirmModalText.danger
+                    ? "var(--cs-error)"
+                    : "var(--cs-purple)",
+                  color: "#fff",
+                  fontFamily: "inherit",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: confirmModalText.disabled
+                    ? "not-allowed"
+                    : "pointer",
+                  opacity: confirmModalText.disabled
+                    ? 0.5
+                    : 1,
+                }}
+              >
+                {confirmModalText.confirmLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showReportModal && (
         <div
           role="presentation"
@@ -3094,18 +3385,18 @@ export default function DocumentPage() {
                   fontWeight: 700,
                   cursor:
                     !reportReason ||
-                    (reportReason ===
-                      "other" &&
-                      !reportDescription.trim()) ||
-                    isSubmittingReport
+                      (reportReason ===
+                        "other" &&
+                        !reportDescription.trim()) ||
+                      isSubmittingReport
                       ? "not-allowed"
                       : "pointer",
                   opacity:
                     !reportReason ||
-                    (reportReason ===
-                      "other" &&
-                      !reportDescription.trim()) ||
-                    isSubmittingReport
+                      (reportReason ===
+                        "other" &&
+                        !reportDescription.trim()) ||
+                      isSubmittingReport
                       ? 0.5
                       : 1,
                 }}
