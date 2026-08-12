@@ -73,13 +73,12 @@ export default function AdminLayout({
           minHeight: "100vh",
           display: "grid",
           placeItems: "center",
-          background: "#f8f7fc",
-          color: "#756c8f",
-          fontFamily:
-            'Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+          background: "var(--cs-bg)",
+          color: "var(--cs-ink-faint)",
+          fontSize: 13.5,
         }}
       >
-        관리자 권한을 확인하고 있어요...
+        관리자 권한을 확인하고 있어요
       </div>
     );
   }
@@ -87,21 +86,48 @@ export default function AdminLayout({
   return (
     <div
       style={{
-        minHeight: "100vh",
+        height: "100vh",
         display: "flex",
-        alignItems: "stretch",
-        background: "#f8f8fb",
+        flexDirection: "column",
+        overflow: "hidden",
+        background: "var(--cs-bg)",
       }}
     >
-      <AdminSidebar />
-
+      {/* 관리자 구분 띠 */}
       <div
         style={{
-          minWidth: 0,
-          flex: 1,
+          flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          height: 30,
+          padding: "0 16px",
+          background: "var(--cs-ink)",
+          color: "var(--cs-surface)",
+          fontSize: 11.5,
+          letterSpacing: "0.02em",
         }}
       >
-        {children}
+        
+        <span>관리자 콘솔</span>
+        <a
+          href="/"
+          style={{
+            color: "var(--cs-surface)",
+            opacity: 0.65,
+            textDecoration: "none",
+          }}
+        >
+          CampusShare로 →
+        </a>
+      </div>
+
+      <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
+        <AdminSidebar />
+
+        <div style={{ minWidth: 0, flex: 1, overflowY: "auto" }}>
+          {children}
+        </div>
       </div>
     </div>
   );

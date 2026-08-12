@@ -235,35 +235,35 @@ export default function AdminUsersPage() {
 
   return (
   <>
-    <main style={{ minHeight: "100vh", background: "#f8f8fb", padding: "28px 32px 48px", fontFamily: 'Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', color: "#292431" }}>
+    <main style={{ minHeight: "100vh", background: "var(--cs-bg)", padding: "24px 32px 60px", color: "var(--cs-ink)" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
         <div>
-          <button type="button" onClick={() => router.push("/admin")} style={{ border: 0, background: "transparent", padding: 0, color: "#7b7190", cursor: "pointer", fontSize: 12 }}>
+          <button type="button" onClick={() => router.push("/admin")} style={{ border: 0, background: "transparent", padding: 0, color: "var(--cs-ink-faint)", cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}>
             ← 대시보드
           </button>
-          <h1 style={{ margin: "10px 0 5px", fontSize: 26 }}>회원 관리</h1>
-          <p style={{ margin: 0, color: "#8e8897", fontSize: 12.5 }}>
+          <h1 style={{ margin: "10px 0 7px", fontSize: 20, fontWeight: 600, letterSpacing: "-0.02em", color: "var(--cs-ink)" }}>회원 관리</h1>
+          <p style={{ margin: 0, color: "var(--cs-ink-faint)", fontSize: 12.5 }}>
             회원 상태와 활동량을 확인하고 이용 정지 또는 영구 정지 조치를 할 수 있어요.
           </p>
         </div>
 
-        <button type="button" onClick={() => void loadUsers()} style={{ border: "1px solid #ddd7e9", borderRadius: 9, background: "#fff", color: "#674ac8", padding: "8px 12px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
+        <button type="button" onClick={() => void loadUsers()} style={{ border: "1px solid var(--cs-border-str)", borderRadius: "var(--cs-radius-md)", background: "var(--cs-surface)", color: "var(--cs-ink-soft)", padding: "6px 12px", cursor: "pointer", fontFamily: "inherit", fontSize: 12.5 }}>
           새로고침
         </button>
       </div>
 
-      <section style={{ marginTop: 22, background: "#fff", border: "1px solid #e9e6ee", borderRadius: 12, overflow: "hidden" }}>
-        <div style={{ padding: 14, display: "flex", gap: 9, flexWrap: "wrap", borderBottom: "1px solid #efedf2" }}>
+      <section style={{ marginTop: 20, background: "var(--cs-surface)", border: "1px solid var(--cs-border)", borderRadius: "var(--cs-radius-xl)", overflow: "hidden" }}>
+        <div style={{ padding: 14, display: "flex", gap: 9, flexWrap: "wrap", borderBottom: "1px solid var(--cs-border)" }}>
           <input
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
             placeholder="닉네임 또는 이메일 검색"
-            style={{ flex: "1 1 260px", height: 38, border: "1px solid #ded9e7", borderRadius: 8, padding: "0 11px", outline: "none", font: "inherit", fontSize: 12.5 }}
+            style={{ flex: "1 1 260px", height: 34, border: "1px solid var(--cs-border-str)", borderRadius: "var(--cs-radius-lg)", padding: "0 11px", background: "var(--cs-surface)", color: "var(--cs-ink)", outline: "none", font: "inherit", fontSize: 12.5 }}
           />
           <select
             value={filter}
             onChange={(event) => setFilter(event.target.value as typeof filter)}
-            style={{ height: 38, border: "1px solid #ded9e7", borderRadius: 8, padding: "0 10px", background: "#fff", font: "inherit", fontSize: 12 }}
+            style={{ height: 34, border: "1px solid var(--cs-border-str)", borderRadius: "var(--cs-radius-lg)", padding: "0 10px", background: "var(--cs-surface)", color: "var(--cs-ink)", font: "inherit", fontSize: 12.5 }}
           >
             <option value="all">전체 회원</option>
             <option value="active">정상</option>
@@ -273,24 +273,24 @@ export default function AdminUsersPage() {
           </select>
         </div>
 
-        {errorMessage && <div style={{ margin: 14, padding: 11, borderRadius: 8, background: "#fff0f2", color: "#b84757", fontSize: 12 }}>{errorMessage}</div>}
+        {errorMessage && <div style={{ margin: 14, padding: 11, borderRadius: "var(--cs-radius-md)", background: "var(--cs-exam-bg)", color: "var(--cs-error)", fontSize: 12 }}>{errorMessage}</div>}
 
         {loading ? (
-          <div style={{ padding: 42, textAlign: "center", color: "#9a94a1", fontSize: 12.5 }}>회원 목록을 불러오는 중...</div>
+          <div style={{ padding: 40, textAlign: "center", color: "var(--cs-ink-faint)", fontSize: 13.5 }}>불러오는 중이에요</div>
         ) : filteredUsers.length === 0 ? (
-          <div style={{ padding: 42, textAlign: "center", color: "#9a94a1", fontSize: 12.5 }}>조건에 맞는 회원이 없습니다.</div>
+          <div style={{ padding: 40, textAlign: "center", color: "var(--cs-ink-faint)", fontSize: 13.5 }}>조건에 맞는 회원이 없어요</div>
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11.5 }}>
               <thead>
-                <tr style={{ background: "#faf9fc", color: "#817b88", textAlign: "left" }}>
-                  <th style={{ padding: "10px 12px" }}>회원</th>
-                  <th style={{ padding: "10px 12px" }}>가입일</th>
-                  <th style={{ padding: "10px 12px" }}>게시글</th>
-                  <th style={{ padding: "10px 12px" }}>댓글</th>
-                  <th style={{ padding: "10px 12px" }}>상태</th>
-                  <th style={{ padding: "10px 12px" }}>정지 종료</th>
-                  <th style={{ padding: "10px 12px" }}>관리</th>
+                <tr style={{ background: "var(--cs-card-bg)", color: "var(--cs-ink-faint)", textAlign: "left" }}>
+                  <th style={{ borderTop: "1px solid var(--cs-border)" }}>회원</th>
+                  <th style={{ borderTop: "1px solid var(--cs-border)" }}>가입일</th>
+                  <th style={{ borderTop: "1px solid var(--cs-border)" }}>게시글</th>
+                  <th style={{ borderTop: "1px solid var(--cs-border)" }}>댓글</th>
+                  <th style={{ borderTop: "1px solid var(--cs-border)" }}>상태</th>
+                  <th style={{ borderTop: "1px solid var(--cs-border)" }}>정지 종료</th>
+                  <th style={{ borderTop: "1px solid var(--cs-border)" }}>관리</th>
                 </tr>
               </thead>
               <tbody>
@@ -308,36 +308,36 @@ export default function AdminUsersPage() {
                   return (
                     <tr key={user.id} style={{ borderTop: "1px solid #f0eef3" }}>
                       <td style={{ padding: "12px", minWidth: 220 }}>
-                        <div style={{ fontWeight: 800, color: "#342d3e" }}>{user.nickname}</div>
-                        <div style={{ marginTop: 4, color: "#99939f", fontSize: 10 }}>{user.email ?? "이메일 없음"}</div>
+                        <div style={{ fontWeight: 500, color: "var(--cs-ink)" }}>{user.nickname}</div>
+                        <div style={{ marginTop: 4, color: "var(--cs-ink-faint)", fontSize: 11 }}>{user.email ?? "이메일 없음"}</div>
                       </td>
                       <td style={{ padding: "12px", whiteSpace: "nowrap" }}>{formatDate(user.created_at)}</td>
                       <td style={{ padding: "12px" }}>{user.post_count}</td>
                       <td style={{ padding: "12px" }}>{user.comment_count}</td>
                       <td style={{ padding: "12px", whiteSpace: "nowrap" }}>
-                        <span style={{ display: "inline-flex", borderRadius: 999, padding: "4px 7px", fontSize: 9.5, fontWeight: 800, background: user.is_deleted ? "#f1eff4" : user.account_status === "banned" ? "#fff0f2" : user.account_status === "suspended" ? "#fff4dc" : user.role === "admin" ? "#f1edff" : "#eaf8ef", color: user.is_deleted ? "#77717e" : user.account_status === "banned" ? "#bd4d5e" : user.account_status === "suspended" ? "#ae7000" : user.role === "admin" ? "#684bc8" : "#39895a" }}>
+                        <span style={{ display: "inline-flex", borderRadius: "var(--cs-radius-tag)", padding: "3px 8px", fontSize: 11, background: user.is_deleted ? "var(--cs-sunk)" : user.account_status === "banned" ? "var(--cs-exam-bg)" : user.account_status === "suspended" ? "var(--cs-trail-bg)" : user.role === "admin" ? "var(--cs-purple-bg)" : "var(--cs-ref-bg)", color: user.is_deleted ? "var(--cs-ink-soft)" : user.account_status === "banned" ? "var(--cs-exam-fg)" : user.account_status === "suspended" ? "var(--cs-trail-fg)" : user.role === "admin" ? "var(--cs-purple-dark)" : "var(--cs-ref-fg)" }}>
                           {statusLabel}
                         </span>
                       </td>
                       <td style={{ padding: "12px", whiteSpace: "nowrap" }}>{formatDate(user.suspended_until)}</td>
                       <td style={{ padding: "12px", minWidth: 250 }}>
                         {user.role === "admin" || user.is_deleted ? (
-                          <span style={{ color: "#aaa4af", fontSize: 10.5 }}>조치 불가</span>
+                          <span style={{ color: "var(--cs-ink-faint)", fontSize: 11.5 }}>조치 불가</span>
                         ) : (
                           <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
                             {user.account_status === "suspended" || user.account_status === "banned" ? (
-                              <button type="button" disabled={workingId === user.id} onClick={() => openActionModal(user, "unsuspend")} style={{ border: "1px solid #d9d3e7", borderRadius: 7, background: "#fff", color: "#4d8861", padding: "6px 8px", cursor: "pointer", fontSize: 10 }}>
+                              <button type="button" disabled={workingId === user.id} onClick={() => openActionModal(user, "unsuspend")} style={{ border: "1px solid var(--cs-border)", borderRadius: "var(--cs-radius-sm)", background: "var(--cs-surface)", color: "var(--cs-ref-fg)", padding: "5px 9px", cursor: "pointer", fontFamily: "inherit", fontSize: 11 }}>
                                 정지 해제
                               </button>
                             ) : (
                               <>
-                                <button type="button" disabled={workingId === user.id} onClick={() => openActionModal(user, "suspend7")} style={{ border: "1px solid #e1d9ca", borderRadius: 7, background: "#fff", color: "#9b6a16", padding: "6px 8px", cursor: "pointer", fontSize: 10 }}>
+                                <button type="button" disabled={workingId === user.id} onClick={() => openActionModal(user, "suspend7")} style={{ border: "1px solid var(--cs-border)", borderRadius: "var(--cs-radius-sm)", background: "var(--cs-surface)", color: "var(--cs-trail-fg)", padding: "5px 9px", cursor: "pointer", fontFamily: "inherit", fontSize: 11 }}>
                                   7일 정지
                                 </button>
-                                <button type="button" disabled={workingId === user.id} onClick={() => openActionModal(user, "suspend30")} style={{ border: "1px solid #e1d9ca", borderRadius: 7, background: "#fff", color: "#9b6a16", padding: "6px 8px", cursor: "pointer", fontSize: 10 }}>
+                                <button type="button" disabled={workingId === user.id} onClick={() => openActionModal(user, "suspend30")} style={{ border: "1px solid var(--cs-border)", borderRadius: "var(--cs-radius-sm)", background: "var(--cs-surface)", color: "var(--cs-trail-fg)", padding: "5px 9px", cursor: "pointer", fontFamily: "inherit", fontSize: 11 }}>
                                   30일 정지
                                 </button>
-                                <button type="button" disabled={workingId === user.id} onClick={() => openActionModal(user, "ban")} style={{ border: "1px solid #ead4d8", borderRadius: 7, background: "#fff", color: "#b94e5e", padding: "6px 8px", cursor: "pointer", fontSize: 10 }}>
+                                <button type="button" disabled={workingId === user.id} onClick={() => openActionModal(user, "ban")} style={{ border: "1px solid var(--cs-border)", borderRadius: "var(--cs-radius-sm)", background: "var(--cs-surface)", color: "var(--cs-exam-fg)", padding: "5px 9px", cursor: "pointer", fontFamily: "inherit", fontSize: 11 }}>
                                   영구 정지
                                 </button>
                               </>
@@ -359,68 +359,38 @@ export default function AdminUsersPage() {
       <div
         role="presentation"
         onClick={closeActionModal}
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 1000,
-          display: "grid",
-          placeItems: "center",
-          padding: 24,
-          background: "rgba(28, 23, 35, 0.42)",
-          backdropFilter: "blur(3px)",
-          fontFamily:
-            'Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-        }}
+        style={{ position: "fixed", inset: 0, zIndex: 1000, display: "grid", placeItems: "center", padding: 24, background: "rgba(24, 24, 27, 0.4)" }}
       >
-        <div
-          role="dialog"
-          aria-modal="true"
-          onClick={(event) => event.stopPropagation()}
-          style={{
-            width: "100%",
-            maxWidth: 430,
-            padding: "24px 24px 20px",
-            boxSizing: "border-box",
-            border: "1px solid #ebe7ef",
-            borderRadius: 16,
-            background: "#ffffff",
-            boxShadow: "0 24px 70px rgba(41, 32, 57, 0.22)",
-          }}
-        >
-          <div
-            style={{
-              width: 42,
-              height: 42,
-              display: "grid",
-              placeItems: "center",
-              borderRadius: 12,
-              background:
-                actionModal.action === "unsuspend"
-                  ? "#eaf8ef"
-                  : "#fff0f2",
-              color:
-                actionModal.action === "unsuspend"
-                  ? "#397b51"
-                  : "#b94d5e",
-              fontSize: 20,
-              fontWeight: 900,
-            }}
-          >
-            {actionModal.action === "unsuspend" ? "✓" : "!"}
-          </div>
+       <div
+  role="dialog"
+  aria-modal="true"
+  onClick={(event) => event.stopPropagation()}
+  style={{
+    width: "100%",
+    maxWidth: 430,
+    padding: "22px 22px 18px",
+    boxSizing: "border-box",
+    border: "1px solid var(--cs-border)",
+    borderRadius: "var(--cs-radius-2xl)",
+    background: "var(--cs-surface)",
+    boxShadow: "var(--cs-shadow-dropdown)",
+  }}
+>
+  {actionModal.action === "unsuspend" ? "✓" : "!"}
 
-          <h2
-            style={{
-              margin: "16px 0 7px",
-              color: "#2d2733",
-              fontSize: 20,
-              letterSpacing: "-0.4px",
-            }}
-          >
-            {actionModal.action === "unsuspend"
-              ? "이용 정지를 해제하시겠어요?"
-              : `${actionLabels[actionModal.action]} 처리하시겠어요?`}
-          </h2>
+  <h2
+    style={{
+      margin: "0 0 8px",
+      color: "var(--cs-ink)",
+      fontSize: 17,
+      fontWeight: 600,
+      letterSpacing: "-0.02em",
+    }}
+  >
+    {actionModal.action === "unsuspend"
+      ? "이용 정지를 해제하시겠어요?"
+      : `${actionLabels[actionModal.action]} 처리하시겠어요?`}
+  </h2>
 
           <p
             style={{
@@ -449,10 +419,7 @@ export default function AdminUsersPage() {
             }}
           >
             <div
-              style={{
-                color: "#9a94a0",
-                fontSize: 9.5,
-              }}
+              style={{ marginTop: 16, padding: "11px 12px", borderRadius: "var(--cs-radius-md)", background: "var(--cs-card-bg)", border: "1px solid var(--cs-border)" }}
             >
               대상 회원
             </div>
@@ -460,9 +427,9 @@ export default function AdminUsersPage() {
             <div
               style={{
                 marginTop: 4,
-                color: "#4a4351",
-                fontSize: 11.5,
-                fontWeight: 750,
+  color: "var(--cs-ink)",
+  fontSize: 12.5,
+  fontWeight: 500,
               }}
             >
               {actionModal.user.nickname}
@@ -482,9 +449,7 @@ export default function AdminUsersPage() {
             >
               <span
                 style={{
-                  color: "#544d5c",
-                  fontSize: 11.5,
-                  fontWeight: 750,
+                  color: "var(--cs-ink)", fontSize: 12.5, fontWeight: 500
                 }}
               >
                 조치 사유
@@ -497,20 +462,7 @@ export default function AdminUsersPage() {
                 }
                 placeholder="조치 사유를 입력해 주세요."
                 rows={3}
-                style={{
-                  width: "100%",
-                  minHeight: 82,
-                  boxSizing: "border-box",
-                  resize: "vertical",
-                  border: "1px solid #ded9e7",
-                  borderRadius: 10,
-                  padding: "10px 11px",
-                  outline: "none",
-                  color: "#38313f",
-                  font: "inherit",
-                  fontSize: 11.5,
-                  lineHeight: 1.6,
-                }}
+                style={{ width: "100%", minHeight: 80, boxSizing: "border-box", resize: "vertical", border: "1px solid var(--cs-border-str)", borderRadius: "var(--cs-radius-lg)", padding: "10px 11px", background: "var(--cs-surface)", outline: "none", color: "var(--cs-ink)", font: "inherit", fontSize: 12.5, lineHeight: 1.6 }}
               />
             </label>
           )}
@@ -527,19 +479,7 @@ export default function AdminUsersPage() {
               type="button"
               disabled={Boolean(workingId)}
               onClick={closeActionModal}
-              style={{
-                height: 38,
-                padding: "0 14px",
-                border: "1px solid #ddd8e4",
-                borderRadius: 9,
-                background: "#ffffff",
-                color: "#716a78",
-                font: "inherit",
-                fontSize: 11.5,
-                fontWeight: 700,
-                cursor: workingId ? "default" : "pointer",
-                opacity: workingId ? 0.65 : 1,
-              }}
+              style={{ height: 36, padding: "0 14px", border: "1px solid var(--cs-border-str)", borderRadius: "var(--cs-radius-lg)", background: "var(--cs-surface)", color: "var(--cs-ink-soft)", font: "inherit", fontSize: 12.5, cursor: workingId ? "default" : "pointer", opacity: workingId ? 0.65 : 1 }}
             >
               취소
             </button>
@@ -548,25 +488,7 @@ export default function AdminUsersPage() {
               type="button"
               disabled={Boolean(workingId)}
               onClick={() => void changeStatus()}
-              style={{
-                height: 38,
-                padding: "0 15px",
-                border: 0,
-                borderRadius: 9,
-                background: workingId
-                  ? "#c9c4ce"
-                  : actionModal.action === "unsuspend"
-                    ? "#4f9667"
-                    : actionModal.action === "ban"
-                      ? "#a93f50"
-                      : "#b07a24",
-                color: "#ffffff",
-                font: "inherit",
-                fontSize: 11.5,
-                fontWeight: 800,
-                cursor: workingId ? "default" : "pointer",
-                opacity: workingId ? 0.8 : 1,
-              }}
+              style={{ height: 36, padding: "0 15px", border: 0, borderRadius: "var(--cs-radius-lg)", background: workingId ? "var(--cs-border-str)" : actionModal.action === "unsuspend" ? "var(--cs-ref-fg)" : actionModal.action === "ban" ? "var(--cs-exam-fg)" : "var(--cs-trail-fg)", color: "var(--cs-surface)", font: "inherit", fontSize: 12.5, fontWeight: 500, cursor: workingId ? "default" : "pointer" }}
             >
               {workingId
                 ? "처리 중..."
@@ -581,34 +503,7 @@ export default function AdminUsersPage() {
 
     {toast && (
       <div
-        style={{
-          position: "fixed",
-          right: 24,
-          bottom: 24,
-          zIndex: 1100,
-          minWidth: 230,
-          maxWidth: 360,
-          padding: "12px 14px",
-          borderRadius: 10,
-          border:
-            toast.type === "success"
-              ? "1px solid #cfe5d6"
-              : "1px solid #f0d4d9",
-          background:
-            toast.type === "success"
-              ? "#f0faf3"
-              : "#fff3f5",
-          color:
-            toast.type === "success"
-              ? "#34784d"
-              : "#ad4858",
-          boxShadow:
-            "0 12px 35px rgba(42, 34, 53, 0.12)",
-          fontFamily:
-            'Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-          fontSize: 11.5,
-          fontWeight: 700,
-        }}
+        style={{ position: "fixed", right: 24, bottom: 24, zIndex: 1100, minWidth: 230, maxWidth: 360, padding: "12px 14px", borderRadius: "var(--cs-radius-lg)", border: "1px solid var(--cs-border)", background: "var(--cs-surface)", color: toast.type === "success" ? "var(--cs-ref-fg)" : "var(--cs-error)", boxShadow: "var(--cs-shadow-dropdown)", fontSize: 12.5 }}
       >
         {toast.type === "success" ? "✓ " : "! "}
         {toast.message}
