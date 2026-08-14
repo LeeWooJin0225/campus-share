@@ -9,7 +9,7 @@ CampusShare는 같은 수업을 듣는 학생들이 강의 필기, 시험 정보
 | Category | Stack |
 |---|---|
 | **Frontend** | <img src="https://skillicons.dev/icons?i=nextjs,react,ts,tailwind,html,md" height="36" /> <br/> Next.js · React · TypeScript · Tailwind CSS · TipTap · Markdown Editor |
-| **Backend & API** | <img src="https://skillicons.dev/icons?i=supabase" height="36" /> <img src="https://cdn.simpleicons.org/openai/412991" height="36" /> <br/> Next.js Route Handler · Supabase · OpenAI API |
+| **Backend & API** | <img src="https://skillicons.dev/icons?i=supabase" height="36" />  <br/> Next.js Route Handler · Supabase · OpenAI API |
 | **Database** | <img src="https://skillicons.dev/icons?i=postgres" height="36" /> <br/> PostgreSQL · RLS · SQL Function · Trigger |
 | **Collaboration** | <img src="https://skillicons.dev/icons?i=github,notion,vscode,figma" height="36" /> <br/> GitHub · Notion · VS Code · Figma |
 
