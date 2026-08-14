@@ -276,11 +276,9 @@ export default function AdminPostsPage() {
       <main
         style={{
           minHeight: "100vh",
-          background: "#f8f8fb",
-          padding: "28px 32px 48px",
-          fontFamily:
-            'Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-          color: "#292431",
+          background: "var(--cs-bg)",
+          padding: "24px 32px 60px",
+          color: "var(--cs-ink)",
         }}
       >
         <div
@@ -292,8 +290,8 @@ export default function AdminPostsPage() {
           }}
         >
           <div>
-            <h1 style={{ margin: "0 0 5px", fontSize: 26 }}>게시글 관리</h1>
-            <p style={{ margin: 0, color: "#8e8897", fontSize: 12.5 }}>
+            <h1 style={{ margin: "0 0 7px", fontSize: 20, fontWeight: 600, letterSpacing: "-0.02em", color: "var(--cs-ink)" }}>게시글 관리</h1>
+            <p style={{ margin: 0, color: "var(--cs-ink-faint)", fontSize: 12.5 }}>
               과목과 교수 정보를 함께 확인하고 게시글 노출 상태를 관리합니다.
             </p>
           </div>
@@ -302,14 +300,14 @@ export default function AdminPostsPage() {
             type="button"
             onClick={() => void loadPosts()}
             style={{
-              border: "1px solid #ddd7e9",
-              borderRadius: 9,
-              background: "#fff",
-              color: "#674ac8",
-              padding: "8px 12px",
+              border: "1px solid var(--cs-border-str)",
+              borderRadius: "var(--cs-radius-md)",
+              background: "var(--cs-surface)",
+              color: "var(--cs-ink-soft)",
+              padding: "6px 12px",
               cursor: "pointer",
-              fontSize: 12,
-              fontWeight: 700,
+              fontFamily: "inherit",
+              fontSize: 12.5,
             }}
           >
             새로고침
@@ -318,11 +316,11 @@ export default function AdminPostsPage() {
 
         <section
           style={{
-            marginTop: 20,
-            display: "grid",
-            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-            gap: 10,
-          }}
+                background: "var(--cs-surface)",
+                border: "1px solid var(--cs-border)",
+                borderRadius: "var(--cs-radius-xl)",
+                padding: "15px 16px",
+              }}
         >
           {[
             ["전체 게시글", posts.length],
@@ -341,12 +339,7 @@ export default function AdminPostsPage() {
             >
               <div style={{ fontSize: 10.5, color: "#8c8694" }}>{label}</div>
               <div
-                style={{
-                  marginTop: 7,
-                  color: "#6548c7",
-                  fontSize: 20,
-                  fontWeight: 850,
-                }}
+                style={{ marginTop: 7, color: "var(--cs-ink)", fontSize: 24, fontWeight: 600, letterSpacing: "-0.02em" }}
               >
                 {count}
               </div>
@@ -356,10 +349,10 @@ export default function AdminPostsPage() {
 
         <section
           style={{
-            marginTop: 14,
-            background: "#fff",
-            border: "1px solid #e9e6ee",
-            borderRadius: 12,
+            marginTop: 12,
+            background: "var(--cs-surface)",
+            border: "1px solid var(--cs-border)",
+            borderRadius: "var(--cs-radius-xl)",
             overflow: "hidden",
           }}
         >
@@ -369,7 +362,7 @@ export default function AdminPostsPage() {
               display: "flex",
               gap: 9,
               flexWrap: "wrap",
-              borderBottom: "1px solid #efedf2",
+              borderBottom: "1px solid var(--cs-border),
             }}
           >
             <input
@@ -377,11 +370,12 @@ export default function AdminPostsPage() {
               onChange={(event) => setKeyword(event.target.value)}
               placeholder="제목, 작성자, 과목, 교수 검색"
               style={{
-                flex: "1 1 320px",
-                height: 38,
-                border: "1px solid #ded9e7",
-                borderRadius: 8,
+                height: 34,
+                border: "1px solid var(--cs-border-str)",
+                borderRadius: "var(--cs-radius-lg)",
                 padding: "0 11px",
+                background: "var(--cs-surface)",
+                color: "var(--cs-ink)",
                 outline: "none",
                 font: "inherit",
                 fontSize: 12.5,
@@ -394,13 +388,15 @@ export default function AdminPostsPage() {
                 setFilter(event.target.value as typeof filter)
               }
               style={{
-                height: 38,
-                border: "1px solid #ded9e7",
-                borderRadius: 8,
-                padding: "0 10px",
-                background: "#fff",
+                height: 34,
+                border: "1px solid var(--cs-border-str)",
+                borderRadius: "var(--cs-radius-lg)",
+                padding: "0 11px",
+                background: "var(--cs-surface)",
+                color: "var(--cs-ink)",
+                outline: "none",
                 font: "inherit",
-                fontSize: 12,
+                fontSize: 12.5,
               }}
             >
               <option value="all">전체</option>
@@ -413,11 +409,9 @@ export default function AdminPostsPage() {
           {errorMessage && (
             <div
               style={{
-                margin: 14,
-                padding: 11,
-                borderRadius: 8,
-                background: "#fff0f2",
-                color: "#b84757",
+                background: "var(--cs-exam-bg)",
+                color: "var(--cs-error)",
+                borderRadius: "var(--cs-radius-md)",
                 fontSize: 12,
               }}
             >
@@ -428,10 +422,10 @@ export default function AdminPostsPage() {
           {loading ? (
             <div
               style={{
-                padding: 42,
+                padding: 40,
                 textAlign: "center",
-                color: "#9a94a1",
-                fontSize: 12.5,
+                color: "var(--cs-ink-faint)",
+                fontSize: 13.5,
               }}
             >
               게시글을 불러오는 중...
@@ -459,8 +453,8 @@ export default function AdminPostsPage() {
                 <thead>
                   <tr
                     style={{
-                      background: "#faf9fc",
-                      color: "#817b88",
+                      background: "var(--cs-card-bg)",
+                      color: "var(--cs-ink-faint)",
                       textAlign: "left",
                     }}
                   >
@@ -486,7 +480,7 @@ export default function AdminPostsPage() {
                     return (
                       <tr
                         key={post.id}
-                        style={{ borderTop: "1px solid #f0eef3" }}
+                        style={{ borderTop: "1px solid var(--cs-border)" }}
                       >
                         <td style={{ padding: "12px", minWidth: 270 }}>
                           <button
@@ -495,13 +489,9 @@ export default function AdminPostsPage() {
                               router.push(`/admin/posts/${post.id}`)
                             }
                             style={{
-                              border: 0,
-                              padding: 0,
-                              background: "transparent",
-                              color: "#342d3e",
-                              cursor: "pointer",
-                              fontWeight: 800,
-                              textAlign: "left",
+                              background: "var(--cs-card-bg)",
+                      color: "var(--cs-ink-faint)",
+                      textAlign: "left",
                             }}
                           >
                             {post.title}
@@ -510,9 +500,7 @@ export default function AdminPostsPage() {
                           {post.moderation_reason && (
                             <div
                               style={{
-                                marginTop: 6,
-                                color: "#b75a68",
-                                fontSize: 10,
+                                color: "var(--cs-exam-fg)", fontSize: 11
                               }}
                             >
                               조치 사유: {post.moderation_reason}
@@ -521,14 +509,12 @@ export default function AdminPostsPage() {
                         </td>
 
                         <td style={{ padding: "12px", minWidth: 170 }}>
-                          <div style={{ color: "#403948", fontWeight: 750 }}>
+                          <div style={{ color: "var(--cs-ink)", fontWeight: 500 }}>
                             {post.subject_name}
                           </div>
                           <div
                             style={{
-                              marginTop: 4,
-                              color: "#97919d",
-                              fontSize: 10,
+                              color: "var(--cs-ink-faint)", fontSize: 11
                             }}
                           >
                             {post.professor_name} 교수님
@@ -544,13 +530,11 @@ export default function AdminPostsPage() {
                         <td style={{ padding: "12px", whiteSpace: "nowrap" }}>
                           <span
                             style={{
-                              display: "inline-flex",
-                              padding: "4px 7px",
-                              borderRadius: 999,
-                              background: "#f1edff",
-                              color: "#674ac8",
-                              fontSize: 9.5,
-                              fontWeight: 800,
+                              padding: "3px 8px",
+                              borderRadius: "var(--cs-radius-tag)",
+                              background: "var(--cs-purple-bg)",
+                              color: "var(--cs-purple-dark)",
+                              fontSize: 11,
                             }}
                           >
                             {postTypeLabel(post.post_type)}
@@ -566,21 +550,19 @@ export default function AdminPostsPage() {
                         <td style={{ padding: "12px", whiteSpace: "nowrap" }}>
                           <span
                             style={{
-                              display: "inline-flex",
-                              borderRadius: 999,
-                              padding: "4px 7px",
-                              fontSize: 9.5,
-                              fontWeight: 800,
+                              borderRadius: "var(--cs-radius-tag)",
+                              padding: "3px 8px",
+                              fontSize: 11,
                               background: post.is_admin_hidden
-                                ? "#fff0f2"
+                                ? "var(--cs-exam-bg)"
                                 : !post.is_published
-                                  ? "#f1eff4"
-                                  : "#eaf8ef",
+                                  ? "var(--cs-sunk)"
+                                  : "var(--cs-ref-bg)",
                               color: post.is_admin_hidden
-                                ? "#bd4d5e"
+                                ? "var(--cs-exam-fg)"
                                 : !post.is_published
-                                  ? "#77717e"
-                                  : "#39895a",
+                                  ? "var(--cs-ink-soft)"
+                                  : "var(--cs-ref-fg)",
                             }}
                           >
                             {status}
@@ -599,18 +581,15 @@ export default function AdminPostsPage() {
                               }
                             }}
                             style={{
-                              border: "1px solid #ddd6ec",
-                              borderRadius: 7,
-                              background: "#fff",
+                              border: "1px solid var(--cs-border)",
+                              borderRadius: "var(--cs-radius-sm)",
+                              background: "var(--cs-surface)",
                               color: post.is_admin_hidden
-                                ? "#4e8a63"
-                                : "#b54d5d",
-                              padding: "6px 9px",
-                              cursor:
-                                workingId === post.id ? "default" : "pointer",
-                              fontSize: 10.5,
-                              fontWeight: 750,
-                              opacity: workingId === post.id ? 0.6 : 1,
+                                ? "var(--cs-ref-fg)"
+                                : "var(--cs-exam-fg)",
+                              padding: "5px 9px",
+                              fontFamily: "inherit",
+                              fontSize: 11,
                             }}
                           >
                             {workingId === post.id
